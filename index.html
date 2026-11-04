@@ -53,7 +53,7 @@ footer{padding:26px 0;display:flex;justify-content:space-between;gap:12px;color:
 #works h2{margin:12px 0 15px;font-size:clamp(28px,3.6vw,46px)}
 #works .lead{font-size:14px;line-height:1.75;max-width:700px}
 #works .reel-gallery-controls{margin:16px 0 8px}
-#works .reel-gallery{height:520px;max-height:520px;overflow-x:auto;overflow-y:auto;align-items:flex-start;scrollbar-gutter:stable}
+#works .reel-gallery{height:520px;max-height:520px;overflow-x:auto;overflow-y:auto;align-items:flex-start;scrollbar-gutter:stable;overscroll-behavior:contain;overflow-anchor:none;contain:layout paint;touch-action:pan-x pan-y}
 #works .reel-slide{align-self:flex-start;flex-shrink:0}
 #works .reel-video{height:570px;overflow:hidden;position:relative;border-radius:8px}
 #works .reel-video iframe{display:block;width:142.857143%;max-width:none;height:980px;transform:scale(.7);transform-origin:top left;border:0}
@@ -85,6 +85,20 @@ footer{padding:26px 0;display:flex;justify-content:space-between;gap:12px;color:
 <footer class="wrap"><strong>MINJAE · A.HAIR</strong><a href="https://www.instagram.com/a.hair_minjae/" target="_blank" rel="noopener noreferrer">Instagram @a.hair_minjae ↗</a><span>© 2026 MINJAE. ALL RIGHTS RESERVED.</span></footer>
 <script>
 (()=>{const gallery=document.getElementById('reel-gallery');if(!gallery)return;
+// Keep wheel movement inside the reel gallery instead of scrolling the page.
+gallery.addEventListener('wheel',(event)=>{
+  if(event.ctrlKey)return;
+  const dx=event.deltaX,dy=event.deltaY;
+  if(!dx&&!dy)return;
+  const horizontal=gallery.scrollWidth-gallery.clientWidth>1;
+  if(horizontal){
+    event.preventDefault();
+    gallery.scrollLeft+=Math.abs(dx)>Math.abs(dy)?dx:dy;
+  }else{
+    event.preventDefault();
+    gallery.scrollTop+=dy;
+  }
+},{passive:false});
 const move=(direction)=>{const slide=gallery.querySelector('.reel-slide');if(!slide)return;gallery.scrollBy({left:(slide.getBoundingClientRect().width+18)*direction,behavior:'smooth'});};
 document.getElementById('reel-prev')?.addEventListener('click',()=>move(-1));
 document.getElementById('reel-next')?.addEventListener('click',()=>move(1));
