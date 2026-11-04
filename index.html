@@ -70,7 +70,7 @@ footer{padding:26px 0;display:flex;justify-content:space-between;gap:12px;color:
 #works .reel-video iframe{pointer-events:none}
 #works .reel-video{isolation:isolate}
 #works .reel-play-btn{position:absolute;z-index:2;top:14px;left:14px;border:0;border-radius:999px;background:#141819;color:white;padding:11px 16px;font-size:12px;font-weight:750;cursor:pointer;box-shadow:0 4px 12px #0004}
-#works .reel-gallery{overflow-anchor:none;overscroll-behavior:contain}
+#works .reel-gallery{overflow-anchor:none;overscroll-behavior:contain;touch-action:none;scroll-behavior:auto}
 .reel-player[hidden]{display:none!important}
 .reel-player{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:15px}
 .reel-player-backdrop{position:absolute;inset:0;background:rgba(7,9,10,.84)}
@@ -81,7 +81,7 @@ footer{padding:26px 0;display:flex;justify-content:space-between;gap:12px;color:
 .reel-player-body iframe{border:0;display:block;width:100%;height:min(760px,76dvh);background:#fff}
 .reel-player-link{padding:12px 16px;display:block;text-align:center;background:#f6f3ed;font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 body.reel-modal-open{overflow:hidden}
-</style>
+#works .reel-gallery{min-height:0;max-width:100%;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;contain:layout paint size;isolation:isolate}</style>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"ItemList","name":"민재 디자이너 인스타그램 릴스 모음","itemListElement":[{"@type":"ListItem","position":1,"name":"민재 디자이너 헤어 디자인 릴스 1","url":"https://www.instagram.com/reel/De0pawTTsgR/"},{"@type":"ListItem","position":2,"name":"민재 디자이너 헤어 디자인 릴스 2","url":"https://www.instagram.com/reel/DeOGo84zGyW/"},{"@type":"ListItem","position":3,"name":"민재 디자이너 헤어 디자인 릴스 3","url":"https://www.instagram.com/reel/DeQ7ENoTCK4/"},{"@type":"ListItem","position":4,"name":"민재 디자이너 헤어 디자인 릴스 4","url":"https://www.instagram.com/reel/DeTkvUETxsg/"},{"@type":"ListItem","position":5,"name":"민재 디자이너 헤어 디자인 릴스 5","url":"https://www.instagram.com/reel/DeWUFRnTw_o/"},{"@type":"ListItem","position":6,"name":"민재 디자이너 헤어 디자인 릴스 6","url":"https://www.instagram.com/reel/De8zXQSTFSm/"},{"@type":"ListItem","position":7,"name":"민재 디자이너 헤어 디자인 릴스 7","url":"https://www.instagram.com/reel/DeghPUlTxFS/"},{"@type":"ListItem","position":8,"name":"민재 디자이너 헤어 디자인 릴스 8","url":"https://www.instagram.com/reel/DelepHbzary/"},{"@type":"ListItem","position":9,"name":"민재 디자이너 헤어 디자인 릴스 9","url":"https://www.instagram.com/reel/DfHICmOT7IV/"},{"@type":"ListItem","position":10,"name":"민재 디자이너 헤어 디자인 릴스 10","url":"https://www.instagram.com/reel/DfPL0yLTWi5/"}]}</script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Person","name":"민재","jobTitle":"헤어디자이너","description":"서울대입구역 에이점헤어에서 남성 커트, 다운펌, 펌 상담을 제공하는 디자이너","worksFor":{"@type":"HairSalon","name":"에이점헤어 서울대입구역점","address":{"@type":"PostalAddress","streetAddress":"남부순환로 1835-5","addressLocality":"관악구","addressRegion":"서울특별시","addressCountry":"KR"}},"knowsAbout":["남성 커트","다운펌","시스루댄디","가일컷","쉐도우펌"]}
@@ -103,20 +103,38 @@ body.reel-modal-open{overflow:hidden}
 <footer class="wrap"><strong>MINJAE · A.HAIR</strong><a href="https://www.instagram.com/a.hair_minjae/" target="_blank" rel="noopener noreferrer">Instagram @a.hair_minjae ↗</a><span>© 2026 MINJAE. ALL RIGHTS RESERVED.</span></footer>
 <script>
 (()=>{const gallery=document.getElementById('reel-gallery');if(!gallery)return;
-// Keep wheel movement inside the reel gallery instead of scrolling the page.
-gallery.addEventListener('wheel',(event)=>{
-  if(event.ctrlKey)return;
-  const dx=event.deltaX,dy=event.deltaY;
-  if(!dx&&!dy)return;
-  const horizontal=gallery.scrollWidth-gallery.clientWidth>1;
-  if(horizontal){
-    event.preventDefault();
-    gallery.scrollLeft+=Math.abs(dx)>Math.abs(dy)?dx:dy;
-  }else{
-    event.preventDefault();
-    gallery.scrollTop+=dy;
+// Capture input before it reaches the outer document. Scroll only the reel rail.
+const isOnGallery=(x,y)=>{const r=gallery.getBoundingClientRect();return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;};
+const reelScroll=(dx,dy)=>{const amount=Math.abs(dx)>Math.abs(dy)?dx:dy;gallery.scrollLeft+=amount;};
+window.addEventListener('wheel',(event)=>{
+  if(event.ctrlKey||!isOnGallery(event.clientX,event.clientY))return;
+  if(event.cancelable)event.preventDefault();
+  event.stopPropagation();
+  reelScroll(event.deltaX,event.deltaY);
+},{capture:true,passive:false});
+let touchLastX=null,touchLastY=null;
+window.addEventListener('touchstart',event=>{
+  if(!event.touches.length)return;
+  const t=event.touches[0];
+  if(isOnGallery(t.clientX,t.clientY)){touchLastX=t.clientX;touchLastY=t.clientY;}
+  else{touchLastX=null;touchLastY=null;}
+},{capture:true,passive:true});
+window.addEventListener('touchmove',event=>{
+  if(touchLastX===null||!event.touches.length)return;
+  const t=event.touches[0];
+  const dx=touchLastX-t.clientX,dy=touchLastY-t.clientY;
+  touchLastX=t.clientX;touchLastY=t.clientY;
+  if(event.cancelable)event.preventDefault();
+  event.stopPropagation();
+  reelScroll(dx,dy);
+},{capture:true,passive:false});
+window.addEventListener('touchend',()=>{touchLastX=null;touchLastY=null;},{capture:true,passive:true});
+window.addEventListener('touchcancel',()=>{touchLastX=null;touchLastY=null;},{capture:true,passive:true});
+gallery.addEventListener('keydown',event=>{
+  if(event.key==='ArrowRight'||event.key==='ArrowLeft'){
+    event.preventDefault();reelScroll(event.key==='ArrowRight'?180:-180,0);
   }
-},{passive:false});
+});
 const player=document.getElementById('reel-player');
 const frame=document.getElementById('reel-player-frame');
 const playerLink=document.getElementById('reel-player-link');
