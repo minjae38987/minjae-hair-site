@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://minjae38987.github.io/minjae-hair-site/sitemap.xml
