@@ -32,6 +32,8 @@ for (const [name, url] of TARGETS) {
   const page = await ctx.newPage();
   const result = { name, url, status: 'unchecked', jsErrors: [], firstPartyFailures: [] };
   page.on('pageerror', err => result.jsErrors.push(String(err.message).slice(0,240)));
+  // Never send synthetic audit events to the real GA4 property.
+  if (name === 'home') await page.route('https://www.googletagmanager.com/**', route => route.abort());
   page.on('response', response => {
     const resUrl = response.url();
     if (resUrl.startsWith(SITE) && response.status() >= 400) result.firstPartyFailures.push({ status: response.status(), url: resUrl });
@@ -67,6 +69,30 @@ for (const [name, url] of TARGETS) {
     result.horizontalOverflowPx = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - window.innerWidth));
     result.viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
     result.blogLinks = await page.locator('a[href*="ahairmj.blogspot.com"], a[href*="blog.naver.com/a-hair_mj"]').count();
+
+    if (name === 'home') {
+      const before = await page.evaluate(() => ({
+        hasChoice: !!document.querySelector('.analytics-choice'),
+        noGaBeforeConsent: !window.__minjaeGaLoaded && !document.querySelector('script[src*="googletagmanager.com/gtag/js"]')
+      }));
+      if (!before.hasChoice || !before.noGaBeforeConsent) throw new Error('GA4 pre-consent privacy check failed: ' + JSON.stringify(before));
+      await page.locator('.analytics-choice [data-accept]').click();
+      const afterConsent = await page.evaluate(() => {
+        const config = (window.dataLayer || []).some(row => row[0] === 'config' && row[1] === 'G-HJ7ZN6WJWH');
+        let received = false;
+        document.addEventListener('naver_booking_click', () => { received = true; }, { once: true });
+        const a = document.querySelector('a[href*="booking.naver.com"]');
+        if (!a) return { config, bookingEvent: false, analyticsEvent: false };
+        const cancelNavigation = e => e.preventDefault();
+        document.addEventListener('click', cancelNavigation, { capture: true, once: true });
+        a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        const analyticsEvent = (window.dataLayer || []).some(row => row[0] === 'event' && row[1] === 'naver_booking_click');
+        return { config, bookingEvent: received, analyticsEvent };
+      });
+      result.analytics = { before, afterConsent };
+      if (!afterConsent.config || !afterConsent.bookingEvent || !afterConsent.analyticsEvent) throw new Error('GA4 or booking event test failed: ' + JSON.stringify(afterConsent));
+    }
+
     await page.screenshot({ path: join(OUT, 'screenshots', name + '.png'), fullPage: false });
   } catch(err) {
     result.status = 'browser-error';
