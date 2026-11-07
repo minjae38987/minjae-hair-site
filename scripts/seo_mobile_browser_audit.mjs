@@ -45,8 +45,25 @@ for (const [name, url] of TARGETS) {
     result.h1 = await page.locator('h1').count();
     result.hasBookingLink = await page.locator('a[href*="booking.naver.com"]').count() > 0;
     result.hasMobileBooking = await page.locator('#mobile-booking-cta a').isVisible().catch(() => false);
-    result.visibleImages = await page.locator('img').evaluateAll(items => items.filter(x => x.complete && x.naturalWidth > 0).length);
+    // Lazy-loading images often sit below the initial viewport; scroll each into view.
+    // Keep the initial viewport metrics above unchanged.
     result.totalImages = await page.locator('img').count();
+    for (let i = 0; i < result.totalImages; i++) {
+      const image = page.locator('img').nth(i);
+      await image.scrollIntoViewIfNeeded({ timeout: 8000 }).catch(() => {});
+      await image.evaluate(el => {
+        if (el.complete) return;
+        return new Promise(resolve => {
+          el.addEventListener('load', resolve, { once: true });
+          el.addEventListener('error', resolve, { once: true });
+          setTimeout(resolve, 5000);
+        });
+      }).catch(() => {});
+    }
+    result.visibleImages = await page.locator('img').evaluateAll(items => items.filter(x => x.complete && x.naturalWidth > 0).length);
+    result.brokenImages = await page.locator('img').evaluateAll(items => items.filter(x => x.complete && x.naturalWidth === 0).map(x => x.src));
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    await page.waitForTimeout(150);
     result.horizontalOverflowPx = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - window.innerWidth));
     result.viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
     result.blogLinks = await page.locator('a[href*="ahairmj.blogspot.com"], a[href*="blog.naver.com/a-hair_mj"]').count();
