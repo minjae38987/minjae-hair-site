@@ -168,7 +168,25 @@ def main():
         lines.append("- HTTP 응답과 기초 HTML SEO 검사에서 발견된 중대 오류 없음 (색인·성능은 별도)")
     lines += ["", "## 해석 시 주의", *["- " + x for x in report["limits"]]]
     (out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print("\n".join(lines))
+    print("\\n".join(lines))
+    print("\\n--- Per-page metadata and conversion link checks ---")
+    for key in ("homepage", "leaf_cut", "volume_perm", "down_perm"):
+        item = results[key]
+        meta = item.get("seo", {})
+        print(json.dumps({
+            "page": key, "http_status": item.get("http_status"),
+            "title": meta.get("title"),
+            "description_length": len(meta.get("description", "")),
+            "canonical": meta.get("canonical"),
+            "h1_count": meta.get("h1_count"),
+            "image_count": meta.get("images"),
+            "missing_image_alt": meta.get("missing_image_alt"),
+            "booking_links": meta.get("booking_link_count"),
+            "blogger_links": meta.get("blogger_link_count"),
+            "naver_blog_links": meta.get("naver_blog_link_count"),
+            "schema_valid": all(x.get("valid") for x in meta.get("jsonld", [])),
+        }, ensure_ascii=False))
+
 
 if __name__ == "__main__":
     main()
