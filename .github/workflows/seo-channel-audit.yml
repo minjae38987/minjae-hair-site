@@ -1,0 +1,35 @@
+name: Hair Channel SEO Audit (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      blogger_url:
+        description: 'Public Blogger post/blog URL (optional)'
+        required: false
+        type: string
+      naver_blog_url:
+        description: 'Public Naver blog/post URL (optional)'
+        required: false
+        type: string
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run channel audits
+        env:
+          BLOGGER_URL: ${{ inputs.blogger_url }}
+          NAVER_BLOG_URL: ${{ inputs.naver_blog_url }}
+        run: |
+          args=()
+          if [[ -n "$BLOGGER_URL" ]]; then args+=(--blogger "$BLOGGER_URL"); fi
+          if [[ -n "$NAVER_BLOG_URL" ]]; then args+=(--naver-blog "$NAVER_BLOG_URL"); fi
+          python scripts/seo_channel_audit.py "${args[@]}" --output seo-channel-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hair-channel-seo-report
+          path: seo-channel-report.json
