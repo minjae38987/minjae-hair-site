@@ -1,0 +1,27 @@
+name: Sitemap fetch diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/sitemap_fetch_diagnostics.py'
+      - '.github/workflows/sitemap-fetch-diagnostics.yml'
+permissions:
+  contents: read
+jobs:
+  sitemap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test sitemap with two request profiles and validate XML
+        run: python scripts/sitemap_fetch_diagnostics.py
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sitemap-fetch-diagnostics
+          path: sitemap-diagnostics/
