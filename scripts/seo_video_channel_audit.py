@@ -48,7 +48,7 @@ def analyze(youtube_url=None, tiktok_url=None):
     channels = dict(CHANNELS)
     channels["youtube"] = youtube_url
     channels["tiktok"] = tiktok_url
-    reel_urls = [x for x in VIDEO_URLS if re.match(r"https://www\\.instagram\\.com/reel/[A-Za-z0-9_-]+/$", x)]
+    reel_urls = [x for x in VIDEO_URLS if re.match(r"https://www\.instagram\.com/reel/[A-Za-z0-9_-]+/$", x)]
     return {
         "scope": "URL registry and static structure; NO creator analytics measured",
         "channels": {k: inspect_url(v, k) for k,v in channels.items()},
