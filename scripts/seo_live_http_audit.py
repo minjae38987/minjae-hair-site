@@ -168,8 +168,8 @@ def main():
         lines.append("- HTTP 응답과 기초 HTML SEO 검사에서 발견된 중대 오류 없음 (색인·성능은 별도)")
     lines += ["", "## 해석 시 주의", *["- " + x for x in report["limits"]]]
     (out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print("\\n".join(lines))
-    print("\\n--- Per-page metadata and conversion link checks ---")
+    print("\n".join(lines))
+    print("\n--- Per-page metadata and conversion link checks ---")
     for key in ("homepage", "leaf_cut", "volume_perm", "down_perm"):
         item = results[key]
         meta = item.get("seo", {})
