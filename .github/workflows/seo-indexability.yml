@@ -1,0 +1,30 @@
+name: Public URL indexability preflight
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/seo_indexability_audit.py'
+      - '.github/workflows/seo-indexability.yml'
+      - 'index.html'
+      - 'robots.txt'
+      - 'sitemap.xml'
+      - 'styles/**/index.html'
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check published canonical URLs and internal discovery paths
+        run: python scripts/seo_indexability_audit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: indexability-preflight-report
+          path: seo-indexability/
