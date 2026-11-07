@@ -1,0 +1,36 @@
+name: SEO video-channel audit (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      youtube_channel:
+        description: 'Confirmed public YouTube channel URL (optional)'
+        required: false
+        type: string
+      tiktok_account:
+        description: 'Confirmed public TikTok account URL (optional)'
+        required: false
+        type: string
+jobs:
+  url-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect video-channel URLs
+        env:
+          YOUTUBE_URL: ${{ inputs.youtube_channel }}
+          TIKTOK_URL: ${{ inputs.tiktok_account }}
+        run: |
+          args=()
+          if [[ -n "$YOUTUBE_URL" ]]; then args+=(--youtube "$YOUTUBE_URL"); fi
+          if [[ -n "$TIKTOK_URL" ]]; then args+=(--tiktok "$TIKTOK_URL"); fi
+          python scripts/seo_video_channel_audit.py "${args[@]}"
+      - name: Store report
+        uses: actions/upload-artifact@v4
+        with:
+          name: seo-video-channel-report
+          path: seo-video-channel-report.json
