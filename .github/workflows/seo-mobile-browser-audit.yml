@@ -6,6 +6,8 @@ on:
     paths:
       - 'scripts/seo_mobile_browser_audit.mjs'
       - '.github/workflows/seo-mobile-browser-audit.yml'
+      - 'index.html'
+      - 'styles/**/index.html'
 permissions:
   contents: read
 jobs:
