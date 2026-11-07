@@ -1,0 +1,32 @@
+name: Mobile browser and Lighthouse SEO audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/seo_mobile_browser_audit.mjs'
+      - '.github/workflows/seo-mobile-browser-audit.yml'
+permissions:
+  contents: read
+jobs:
+  mobile-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser and audit tools
+        run: |
+          npm install --no-save playwright lighthouse
+          npx playwright install --with-deps chromium
+      - name: Audit deployed pages using a mobile browser and Lighthouse
+        run: node scripts/seo_mobile_browser_audit.mjs
+      - name: Upload HTML-rendering audit, screenshots and Lighthouse output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-seo-browser-audit
+          path: audit-mobile/
+          if-no-files-found: warn
