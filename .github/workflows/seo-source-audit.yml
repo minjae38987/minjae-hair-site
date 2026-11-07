@@ -1,0 +1,22 @@
+name: SEO source audit (manual)
+on:
+  workflow_dispatch:
+jobs:
+  static-seo-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run source checks
+        run: python scripts/seo_source_audit.py > seo-report.json
+      - name: Display report
+        run: cat seo-report.json
+      - name: Upload JSON artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: seo-source-report
+          path: seo-report.json
