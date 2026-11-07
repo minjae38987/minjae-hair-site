@@ -1,0 +1,24 @@
+name: Discover published blog article links
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/discover_hair_blog_links.py'
+      - '.github/workflows/discover-hair-blog-links.yml'
+permissions:
+  contents: read
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/discover_hair_blog_links.py | tee discovered-blog-links.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-blog-links
+          path: discovered-blog-links.txt
