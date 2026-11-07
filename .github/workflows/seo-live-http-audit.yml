@@ -1,0 +1,28 @@
+name: Live external website SEO audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/seo_live_http_audit.py'
+      - '.github/workflows/seo-live-http-audit.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check public URLs and SEO
+        run: python scripts/seo_live_http_audit.py --out seo-live
+      - name: Publish report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seo-live-http-results
+          path: seo-live/
+          if-no-files-found: warn
