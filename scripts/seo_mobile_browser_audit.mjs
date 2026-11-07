@@ -103,6 +103,20 @@ for (const [name, url] of [TARGETS[0], TARGETS[3]]) {
       for (const key of ['largest-contentful-paint','cumulative-layout-shift','total-blocking-time','first-contentful-paint','speed-index']) {
         const a = obj.audits?.[key]; if(a) item[key] = { numericValue: a.numericValue, displayValue: a.displayValue };
       }
+      item.accessibilityFailures = (obj.categories?.accessibility?.auditRefs || [])
+        .map(ref => ({ id: ref.id, weight: ref.weight, audit: obj.audits?.[ref.id] }))
+        .filter(x => x.weight > 0 && x.audit && x.audit.score !== null && x.audit.score < 1)
+        .map(x => ({
+          id: x.id, title: x.audit.title, score: x.audit.score,
+          elements: (x.audit.details?.items || []).slice(0, 4).map(y => ({
+            html: (y.node?.snippet || y.node?.selector || '').slice(0, 260),
+            explanation: (y.node?.explanation || '').slice(0, 240)
+          }))
+        }));
+      item.seoFailures = (obj.categories?.seo?.auditRefs || [])
+        .map(ref => ({ id: ref.id, weight: ref.weight, audit: obj.audits?.[ref.id] }))
+        .filter(x => x.weight > 0 && x.audit && x.audit.score !== null && x.audit.score < 1)
+        .map(x => ({ id: x.id, title: x.audit.title, score: x.audit.score }));
       item.opportunities = Object.entries(obj.audits || {})
         .filter(([k,v]) => v.details?.overallSavingsMs > 150 && v.score !== null && v.score < 0.9)
         .map(([k,v]) => ({ id:k, title:v.title, estimatedSavingsMs:Math.round(v.details.overallSavingsMs) }))
