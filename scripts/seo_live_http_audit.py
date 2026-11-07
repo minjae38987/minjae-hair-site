@@ -65,7 +65,7 @@ class Extract(HTMLParser):
             self._data.append(data)
     def handle_endtag(self, tag):
         if tag == self._capture or (tag == "script" and self._capture == "jsonld"):
-            val = re.sub(r"\\s+", " ", "".join(self._data)).strip()
+            val = re.sub(r"\s+", " ", "".join(self._data)).strip()
             if self._capture == "title":
                 self.title = val
             elif self._capture in ("h1", "h2"):
