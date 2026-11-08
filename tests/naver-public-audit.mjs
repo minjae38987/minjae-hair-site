@@ -4,31 +4,12 @@ import path from 'node:path';
 const out='naver-audit-results';
 fs.mkdirSync(out,{recursive:true});
 const urls=[
- ['minjae','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=details&lang=ko&area=pll'],
- ['mande_dogyeom','https://m.booking.naver.com/booking/13/bizes/1179861/items/8008395?theme=place&tab=details&lang=ko&area=ple'],
- ['mande_junseon','https://m.booking.naver.com/booking/13/bizes/1179861/items/6334851?theme=place&tab=details&lang=ko&area=ple'],
- ['mande_jiho','https://m.booking.naver.com/booking/13/bizes/1179861/items/6333038?theme=place&tab=details&lang=ko&area=ple'],
- ['iron_hyemin','https://m.booking.naver.com/booking/13/bizes/1264884/items/6783456?theme=place&tab=details&lang=ko&area=ple'],
- ['iron_dongwoo','https://m.booking.naver.com/booking/13/bizes/1264884/items/8045486?theme=place&tab=details&lang=ko&area=ple'],
- ['iron_seonho','https://m.booking.naver.com/booking/13/bizes/1264884/items/8045412?theme=place&tab=details&lang=ko&area=ple'],
- ['view_yura','https://m.booking.naver.com/booking/13/bizes/217940/items/3007996?theme=place&tab=details&lang=ko&area=ple'],
- ['view_seyeon','https://m.booking.naver.com/booking/13/bizes/217940/items/3007979?theme=place&tab=details&lang=ko&area=ple'],
- ['own_place_home','https://m.place.naver.com/hairshop/2074303770/home'],
- ['own_place_reviews','https://m.place.naver.com/hairshop/2074303770/review/visitor'],
- ['own_place_photos','https://m.place.naver.com/hairshop/2074303770/photo'],
- ['own_place_style','https://m.place.naver.com/hairshop/2074303770/styleInfo'],
- ['own_place_price','https://m.place.naver.com/hairshop/2074303770/price'],
- ['own_booking_menu','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=book&lang=ko&area=pll'],
- ['search_hairshop','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구역 미용실')],
- ['search_menshair','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자머리')],
- ['search_menscut','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자 커트')],
- ['search_downperm','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 다운펌')],
- ['search_mensperm','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자 펌')],
- ['search_dandy','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 시스루댄디컷')],
- ['search_drop','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 드롭컷')],
- ['search_leaf','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 리프컷')],
- ['search_filler','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 필러스컷')]
- ];
+ ['review_minjae','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=review&lang=ko&area=pll'],
+ ['review_dogyeom','https://m.booking.naver.com/booking/13/bizes/1179861/items/8008395?theme=place&tab=review&lang=ko&area=ple'],
+ ['review_jiho','https://m.booking.naver.com/booking/13/bizes/1179861/items/6333038?theme=place&tab=review&lang=ko&area=ple'],
+ ['review_dongwoo','https://m.booking.naver.com/booking/13/bizes/1264884/items/8045486?theme=place&tab=review&lang=ko&area=ple'],
+ ['review_own_filtered','https://m.place.naver.com/hairshop/2074303770/review/visitor?reviewItem=8096768']
+]
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 const report=[];
 try{
@@ -44,7 +25,7 @@ try{
      entry.title=(await page.title()).slice(0,160);
      const body=(await page.locator('body').innerText({timeout:12000}).catch(()=>''));entry.textLength=body.length;
      entry.securityChallenge=/보안 확인을 완료해 주세요|가상으로 제작된|실제 영수증 사진이 아닙니다/.test(body);
-     entry.visibleExcerpt=body.replace(/\\s+/g,' ').slice(0,4800);
+     entry.visibleExcerpt=body.replace(/\\s+/g,' ').slice(0,12000);
      entry.access=body.length>100?'rendered':'limited';
      entry.flags={
        hasShop:body.includes('에이점헤어'),
@@ -61,7 +42,7 @@ try{
        const k=normalized.indexOf(term);if(k>=0) entry['section_'+term]=normalized.slice(Math.max(0,k-250),k+2400);
      }
      entry.stylistBookingLinks=await page.locator('a[href*="m.booking.naver.com/booking/"]').evaluateAll(nodes=>nodes.slice(0,25).map(a=>({text:(a.innerText||'').trim().slice(0,120),href:a.href.slice(0,160)}))).catch(()=>[]);
-     entry.topText=normalized.slice(0,5400);
+     entry.topText=normalized.slice(0,12000);
      // Screenshot evidence is saved per request. Avoid using any user login or submitting forms.
      entry.visibleImages=await page.locator('img').evaluateAll(nodes=>nodes.slice(0,30).map(img=>({
        alt:img.getAttribute('alt')||'',src:(img.currentSrc||img.src||'').slice(0,220),
