@@ -4,16 +4,16 @@ import path from 'node:path';
 const out='naver-audit-results';
 fs.mkdirSync(out,{recursive:true});
 const urls=[
- ['own_profile','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=details&lang=ko&area=pll'],
- ['competitor_mande_home','https://m.place.naver.com/hairshop/1319077518/home'],
- ['competitor_iron_home','https://m.place.naver.com/hairshop/1571382197/home'],
- ['competitor_view_home','https://m.place.naver.com/hairshop/1894939931/home'],
- ['competitor_mande_style_down','https://m.place.naver.com/hairshop/1319077518/styleInfo/41266663'],
- ['competitor_mande_style_down2','https://m.place.naver.com/hairshop/1319077518/styleInfo/101020883'],
- ['competitor_view_style_down','https://m.place.naver.com/hairshop/1894939931/styleInfo/54128409'],
- ['competitor_view_style_down2','https://m.place.naver.com/hairshop/1894939931/styleInfo/46293658'],
- ['competitor_mande_stylist','https://m.place.naver.com/hairshop/1319077518/stylist']
-];
+ ['minjae','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=details&lang=ko&area=pll'],
+ ['mande_dogyeom','https://m.booking.naver.com/booking/13/bizes/1179861/items/8008395?theme=place&tab=details&lang=ko&area=ple'],
+ ['mande_junseon','https://m.booking.naver.com/booking/13/bizes/1179861/items/6334851?theme=place&tab=details&lang=ko&area=ple'],
+ ['mande_jiho','https://m.booking.naver.com/booking/13/bizes/1179861/items/6333038?theme=place&tab=details&lang=ko&area=ple'],
+ ['iron_hyemin','https://m.booking.naver.com/booking/13/bizes/1264884/items/6783456?theme=place&tab=details&lang=ko&area=ple'],
+ ['iron_dongwoo','https://m.booking.naver.com/booking/13/bizes/1264884/items/8045486?theme=place&tab=details&lang=ko&area=ple'],
+ ['iron_seonho','https://m.booking.naver.com/booking/13/bizes/1264884/items/8045412?theme=place&tab=details&lang=ko&area=ple'],
+ ['view_yura','https://m.booking.naver.com/booking/13/bizes/217940/items/3007996?theme=place&tab=details&lang=ko&area=ple'],
+ ['view_seyeon','https://m.booking.naver.com/booking/13/bizes/217940/items/3007979?theme=place&tab=details&lang=ko&area=ple']
+]
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 const report=[];
 try{
@@ -46,7 +46,7 @@ try{
        const k=normalized.indexOf(term);if(k>=0) entry['section_'+term]=normalized.slice(Math.max(0,k-250),k+2400);
      }
      entry.stylistBookingLinks=await page.locator('a[href*="m.booking.naver.com/booking/"]').evaluateAll(nodes=>nodes.slice(0,25).map(a=>({text:(a.innerText||'').trim().slice(0,120),href:a.href.slice(0,160)}))).catch(()=>[]);
-     entry.topText=normalized.slice(0,5200);
+     entry.topText=normalized.slice(0,5400);
      if(name.startsWith('search_')) {
        entry.placeCards=await page.locator('a[href*="m.place.naver.com/hairshop/"]').evaluateAll(nodes=>nodes.slice(0,15).map(a=>({name:(a.innerText||'').trim().slice(0,75),url:a.href.split('?')[0]}))).catch(()=>[]);
        entry.ourPlaceVisible=entry.placeCards.some(a=>a.url.includes('/2074303770'));
