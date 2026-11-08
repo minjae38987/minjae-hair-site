@@ -27,6 +27,15 @@ async function inspect() {
     if(!body.includes('G-HJ7ZN6WJWH') && !body.includes('assets/ga4-consent.js'))throw new Error('Analytics module missing: '+url);
     const scripts=[...body.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m=>JSON.parse(m[1]));
     if(!scripts.length)throw new Error('No JSON-LD: '+url);
+    // Verify the media paths exposed to crawlers are actually served as images.
+    const images=[...body.matchAll(/<img\\b[^>]*\\bsrc="([^"]+)"[^>]*>/g)].map(m=>m[1]);
+    for(const src of images){
+      const imageUrl=new URL(src,url);
+      if(imageUrl.origin!==new URL(base).origin)throw new Error('Unexpected image origin: '+src);
+      const imageResponse=await fetch(imageUrl,{method:'HEAD',redirect:'follow',signal:AbortSignal.timeout(20000)});
+      const mime=imageResponse.headers.get('content-type')||'';
+      if(imageResponse.status!==200 || !mime.startsWith('image/'))throw new Error('Unreachable portfolio image: '+src+' HTTP '+imageResponse.status+' type '+mime);
+    }
     const nodes=scripts.flatMap(obj=>obj['@graph']||[obj]);
     if(path){
       const breadcrumb=nodes.find(x=>x['@type']==='BreadcrumbList');
