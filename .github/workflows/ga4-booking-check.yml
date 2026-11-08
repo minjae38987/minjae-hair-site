@@ -1,0 +1,26 @@
+name: GA4 booking tracking checks
+
+on:
+  pull_request:
+    paths:
+      - 'assets/booking-analytics.js'
+      - 'assets/ga4-consent.js'
+      - 'tests/ga4-booking.test.cjs'
+      - '.github/workflows/ga4-booking-check.yml'
+      - 'index.html'
+      - 'styles/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tracking-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check analytics modules and event routing
+        run: node --test tests/ga4-booking.test.cjs

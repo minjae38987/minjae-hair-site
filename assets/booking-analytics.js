@@ -1,30 +1,34 @@
-/* Booking click measurement adapter. No external tracking or network calls by itself.
-   If GA4 is configured later, reports an event using the existing gtag instance.
-   Navigation is never prevented or delayed; no personal data is collected here. */
+/* First-party booking intent tracking. Never blocks navigation.
+   GA4 transmission only occurs after the consent module has initialized gtag.
+   This event measures a click, NOT a completed Naver reservation. */
 (() => {
-  const bookingHost = 'm.booking.naver.com';
+  'use strict';
   const eventName = 'naver_booking_click';
-  const identify = (anchor) => {
+  const getBookingUrl = (anchor) => {
     try {
-      const target = new URL(anchor.href, document.baseURI);
-      if (target.hostname !== bookingHost || !target.pathname.startsWith('/booking/')) return null;
-      return target;
+      const url = new URL(anchor.href, document.baseURI);
+      if (url.hostname !== 'm.booking.naver.com' || !url.pathname.startsWith('/booking/')) return null;
+      return url;
     } catch (_) { return null; }
   };
+  const getLocation = (anchor) => {
+    if (anchor.closest('.mobile-booking-cta')) return 'mobile_sticky';
+    if (anchor.closest('header, nav')) return 'header';
+    if (anchor.closest('#home, .hero')) return 'hero';
+    if (anchor.closest('#visit, .contact, .cta')) return 'content_cta';
+    if (anchor.closest('main, article, aside')) return 'article_cta';
+    return 'other';
+  };
   document.addEventListener('click', (event) => {
-    const anchor = event.target?.closest?.('a[href]');
-    if (!anchor || !identify(anchor)) return;
-    const element = anchor.closest('.mobile-booking-cta') ? 'mobile_sticky' :
-      anchor.closest('nav, header') ? 'header' :
-      anchor.closest('.cta, #visit') ? 'content_cta' : 'other';
+    const anchor = event.target && event.target.closest && event.target.closest('a[href]');
+    if (!anchor || !getBookingUrl(anchor)) return;
     const data = {
       page_path: window.location.pathname,
-      booking_button_location: element
+      booking_button_location: getLocation(anchor)
     };
-    // Useful for debugging, first-party dashboards, and later analytics adapters.
     document.dispatchEvent(new CustomEvent(eventName, { detail: data }));
-    if (typeof window.gtag === 'function') {
-      window.gtag('event', eventName, data);
-    }
+    // Refusal / revocation must never be bypassed by this module.
+    if (window['ga-disable-G-ZZWKEPMY3W'] === true) return;
+    if (typeof window.gtag === 'function') window.gtag('event', eventName, data);
   }, { passive: true });
 })();

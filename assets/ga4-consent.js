@@ -3,7 +3,7 @@
    No personal details are included in custom booking-click event parameters. */
 (() => {
   'use strict';
-  const measurementId = 'G-HJ7ZN6WJWH';
+  const measurementId = 'G-ZZWKEPMY3W';
   const key = 'minjae_analytics_choice_v1';
   const styleId = 'analytics-choice-styles';
   const getChoice = () => {
