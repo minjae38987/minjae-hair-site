@@ -11,7 +11,13 @@ const urls=[
  ['place_home','https://m.place.naver.com/hairshop/2074303770/home'],
  ['place_stylist','https://m.place.naver.com/hairshop/2074303770/stylist'],
  ['place_price','https://m.place.naver.com/hairshop/2074303770/price'],
- ['place_reviews','https://m.place.naver.com/hairshop/2074303770/review/visitor']
+ ['place_reviews','https://m.place.naver.com/hairshop/2074303770/review/visitor'],
+ ['booking_menu','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=book&lang=ko&area=pll'],
+ ['place_style','https://m.place.naver.com/hairshop/2074303770/style'],
+ ['search_downperm','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 다운펌')],
+ ['search_menscut','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자 커트')],
+ ['search_hairshop','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구역 미용실')],
+ ['search_mensperm','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자 펌')]
 ];
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 const report=[];
@@ -27,6 +33,7 @@ try{
      entry.status=res?.status()||null;entry.finalUrl=page.url();
      entry.title=(await page.title()).slice(0,160);
      const body=(await page.locator('body').innerText({timeout:12000}).catch(()=>''));entry.textLength=body.length;
+     entry.securityChallenge=/보안 확인을 완료해 주세요|가상으로 제작된|실제 영수증 사진이 아닙니다/.test(body);
      entry.visibleExcerpt=body.replace(/\\s+/g,' ').slice(0,1700);
      entry.access=body.length>100?'rendered':'limited';
      entry.flags={
@@ -39,6 +46,11 @@ try{
      };
      const relevant=await page.locator('a[href]').evaluateAll(nodes=>nodes.filter(a=>/에이점헤어|민재|예약|지도/.test(a.innerText||'')).slice(0,12).map(a=>({text:(a.innerText||'').slice(0,65),href:(a.href||'').slice(0,180)}))).catch(()=>[]);
      entry.relevantLinks=relevant;
+     if(name.startsWith('search_')) {
+       entry.placeCards=await page.locator('a[href*="m.place.naver.com/hairshop/"]').evaluateAll(nodes=>nodes.slice(0,15).map(a=>({name:(a.innerText||'').trim().slice(0,75),url:a.href.split('?')[0]}))).catch(()=>[]);
+       entry.ourPlaceVisible=entry.placeCards.some(a=>a.url.includes('/2074303770'));
+     }
+     if(name==='booking_menu') entry.serviceExcerpt=body.slice(0,3200);
      await page.screenshot({path:path.join(out,name+'.png'),fullPage:false,timeout:14000}).catch(()=>{});
    }catch(error){entry.access='error';entry.error=String(error).slice(0,500);}
    entry.failedRequests=failed;
