@@ -27,8 +27,7 @@ try {
     await page.route('**/*', async route => {
       const url = new URL(route.request().url());
       // Never send test pageviews or booking clicks into real GA4.
-      if (/(^|\\.)google-analytics\\.com$/.test(url.hostname) &&
-          /\\/(g\\/)?collect|\\/j\\/collect|\\/r\\/collect/.test(url.pathname)) {
+      if (['google-analytics.com','www.google-analytics.com','region1.google-analytics.com'].includes(url.hostname) && url.pathname.endsWith('/collect')) {
         collect.push({id:url.searchParams.get('tid'),event:url.searchParams.get('en')});
         await route.fulfill({status:204,body:''});
       } else {
