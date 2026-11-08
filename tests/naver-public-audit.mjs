@@ -7,7 +7,11 @@ const urls=[
  ['booking','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=details&lang=ko&area=pll'],
  ['search_business','https://search.naver.com/search.naver?query='+encodeURIComponent('에이점헤어 서울대입구역점')],
  ['search_designer','https://search.naver.com/search.naver?query='+encodeURIComponent('에이점헤어 민재 디자이너')],
- ['search_keyword','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자머리')]
+ ['search_keyword','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자머리')],
+ ['place_home','https://m.place.naver.com/hairshop/2074303770/home'],
+ ['place_stylist','https://m.place.naver.com/hairshop/2074303770/stylist'],
+ ['place_price','https://m.place.naver.com/hairshop/2074303770/price'],
+ ['place_reviews','https://m.place.naver.com/hairshop/2074303770/review/visitor']
 ];
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 const report=[];
