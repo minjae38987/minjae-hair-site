@@ -67,3 +67,15 @@ test('Sitemap URL is listed in project robots document', () => {
   const robots = readFileSync(path.join(root, 'robots.txt'), 'utf8');
   assert.ok(robots.includes('Sitemap: ' + domain + 'sitemap.xml'));
 });
+
+test('Instagram gallery defers all embeds until requested or visible', () => {
+  const html = readFileSync(path.join(root, 'index.html'), 'utf8');
+  const embeds = [...html.matchAll(/<iframe[^>]*instagram\.com\/reel\/[^>]+>/g)].map(m => m[0]);
+  assert.equal(embeds.length, 10, 'Expected ten gallery reel embeds');
+  for (const iframe of embeds) {
+    assert.match(iframe, /data-src="https:\/\/www\.instagram\.com\/reel\//);
+    assert.doesNotMatch(iframe, /\ssrc=/, 'Instagram iframe loads before viewport');
+    assert.match(iframe, /loading="lazy"/);
+  }
+  assert.match(html, /IntersectionObserver/);
+});
