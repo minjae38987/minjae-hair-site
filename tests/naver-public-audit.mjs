@@ -50,7 +50,19 @@ try{
        entry.placeCards=await page.locator('a[href*="m.place.naver.com/hairshop/"]').evaluateAll(nodes=>nodes.slice(0,15).map(a=>({name:(a.innerText||'').trim().slice(0,75),url:a.href.split('?')[0]}))).catch(()=>[]);
        entry.ourPlaceVisible=entry.placeCards.some(a=>a.url.includes('/2074303770'));
      }
-     if(name==='booking_menu') entry.serviceExcerpt=body.slice(0,3200);
+     if(name==='booking_menu') {
+       entry.serviceExcerpt=body.slice(0,3200);
+       // Read-only: open the publicly displayed perm category, do not select a time or book.
+       const permTab=page.getByText('펌',{exact:true}).first();
+       if(await permTab.count()){
+         await permTab.click({timeout:7000}).catch(()=>{});
+         await page.waitForTimeout(1200);
+         const permText=await page.locator('body').innerText().catch(()=> '');
+         const menuStart=permText.indexOf('시술 메뉴를 선택해 주세요');
+         entry.permMenuExcerpt=(menuStart>=0?permText.slice(menuStart):permText).slice(0,2600);
+         entry.partialDownPermListed=/부분\s*다운펌|다운펌\s*25,?000|25,?000원/.test(entry.permMenuExcerpt);
+       }
+     }
      await page.screenshot({path:path.join(out,name+'.png'),fullPage:false,timeout:14000}).catch(()=>{});
    }catch(error){entry.access='error';entry.error=String(error).slice(0,500);}
    entry.failedRequests=failed;
