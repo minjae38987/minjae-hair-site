@@ -79,3 +79,19 @@ test('Instagram gallery defers all embeds until requested or visible', () => {
   }
   assert.match(html, /IntersectionObserver/);
 });
+
+test('Home haircut guidance provides distinct user-first help and crawlable style links', () => {
+  const html = readFileSync(path.join(root, 'index.html'), 'utf8');
+  const start = html.indexOf('id="mens-cut-consultation"');
+  const end = html.indexOf('id="seo-styles"', start);
+  assert.ok(start > 0 && end > start, 'Missing haircut choice guide');
+  const section = html.slice(start, end);
+  assert.match(section, /서울대입구 남자 커트/);
+  assert.match(section, /옆머리가 뜨는 경우/);
+  assert.match(section, /앞머리가 쉽게 가라앉는 경우/);
+  assert.match(section, /긴 머리를 정리하는 경우/);
+  for (const slug of ['mens-down-perm-guide','mens-leaf-volume-perm','mens-leaf-cut-before-after']) {
+    assert.ok(section.includes('href="styles/'+slug+'/'), 'Missing contextual style link: '+slug);
+  }
+  assert.match(section, /m\.booking\.naver\.com\/booking\//);
+});
