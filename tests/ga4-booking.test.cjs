@@ -18,7 +18,7 @@ test('All four pages load consent and booking scripts', () => {
     assert.match(source,/assets\/ga4-consent\.js/);
     assert.ok(source.indexOf('booking-analytics.js') < source.indexOf('ga4-consent.js'));
   }
-  assert.match(consent,/G-HJ7ZN6WJWH/);
+  assert.match(consent,/G-ZZWKEPMY3W/);
 });
 test('Booking click tracking is consent gated and distinguishes placements', () => {
   let handler, emitted = [], sent = [], flags = {};
@@ -54,7 +54,7 @@ test('Booking click tracking is consent gated and distinguishes placements', () 
   ctx.window.gtag=(...args)=>sent.push(args);
   for(const location of ['header','mobile_sticky','content_cta','article_cta']) click(location);
   assert.deepEqual(sent.map(x=>x[2].booking_button_location), ['header','mobile_sticky','content_cta','article_cta']);
-  ctx.window['ga-disable-G-HJ7ZN6WJWH']=true;
+  ctx.window['ga-disable-G-ZZWKEPMY3W']=true;
   click('hero');
   assert.equal(sent.length,4);
   assert.equal(emitted.length,6);
