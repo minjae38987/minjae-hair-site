@@ -6,7 +6,9 @@ on:
       - 'assets/booking-analytics.js'
       - 'assets/ga4-consent.js'
       - 'tests/ga4-booking.test.cjs'
+      - 'tests/ga4-live-delivery.mjs'
       - '.github/workflows/ga4-booking-check.yml'
+      - '.github/workflows/ga4-live-delivery.yml'
       - 'index.html'
       - 'styles/**'
   workflow_dispatch:
@@ -24,3 +26,17 @@ jobs:
           node-version: '22'
       - name: Check analytics modules and event routing
         run: node --test tests/ga4-booking.test.cjs
+  public-site-delivery-diagnosis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Inspect live public GA4 network requests (intercept test hits)
+        run: node tests/ga4-live-delivery.mjs
