@@ -13,6 +13,7 @@ on:
       - 'sitemap.xml'
       - 'robots.txt'
       - 'tests/seo-integrity.test.cjs'
+      - 'tests/seo-live-site.mjs'
       - 'styles/**'
   push:
     branches: [main]
@@ -26,6 +27,7 @@ on:
       - 'sitemap.xml'
       - 'robots.txt'
       - 'tests/seo-integrity.test.cjs'
+      - 'tests/seo-live-site.mjs'
       - 'styles/**'
   workflow_dispatch:
 
@@ -45,6 +47,7 @@ jobs:
           node --check assets/ga4-consent.js
           node --check assets/booking-analytics.js
           node --check tests/ga4-live-delivery.mjs
+          node --check tests/seo-live-site.mjs
           node --test tests/ga4-booking.test.cjs tests/seo-integrity.test.cjs
   public-site-delivery-diagnosis:
     if: github.event_name != 'pull_request'
@@ -61,3 +64,15 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Inspect live public GA4 network requests (intercept test hits)
         run: node tests/ga4-live-delivery.mjs
+
+  public-site-seo-audit:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Inspect deployed sitemap, crawlability and metadata
+        run: node tests/seo-live-site.mjs
