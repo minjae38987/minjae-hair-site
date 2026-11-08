@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 
 const BASE = 'https://minjae38987.github.io/minjae-hair-site/';
-const ID = 'G-ZZWKEPMY3W';
+const ID = 'G-HJ7ZN6WJWH';
 const paths = [
   '',
   'styles/mens-leaf-cut-before-after/',
