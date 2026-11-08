@@ -48,7 +48,8 @@ try{
      const windowText=beforeMenu.slice(Math.max(0,beforeMenu.indexOf('날짜와 시간을 선택해 주세요'))).slice(-800);
      const matches=[...windowText.matchAll(/\b([0-9]{1,2}:[0-9]{2})\b/g)].map(m=>m[1]);
      const controls=await page.locator('button').evaluateAll(nodes=>nodes.filter(b=>/^\\d{1,2}:\\d{2}$/.test((b.innerText||'').trim())).map(b=>({label:b.innerText.trim(),disabled:b.disabled,ariaDisabled:b.getAttribute('aria-disabled'),className:(b.className||'').toString().slice(0,110)}))).catch(()=>[]);
-     report.calendarDates.push({day,status:'enabled',timeLabels:[...new Set(matches)],timeControls:controls,timeText:windowText.slice(-500),securityChallenge:challenge(body)});
+     const slotDebug=day===9||day===10||day===16 ? await page.getByText('11:00',{exact:true}).first().evaluate(el=>({tag:el.tagName,html:el.parentElement?.outerHTML.slice(0,1250),ancestor:el.parentElement?.parentElement?.outerHTML.slice(0,1700)})).catch(()=>null) : null;
+     report.calendarDates.push({day,status:'enabled',timeLabels:[...new Set(matches)],timeControls:controls,slotDebug,timeText:windowText.slice(-500),securityChallenge:challenge(body)});
      console.log('NAVER_BOOKING_DATE '+JSON.stringify(report.calendarDates[report.calendarDates.length-1]));
    }catch(e){report.calendarDates.push({day,status:'incomplete',error:String(e).slice(0,180)});}
  }
