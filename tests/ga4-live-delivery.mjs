@@ -40,6 +40,20 @@ try {
       await page.waitForSelector('.analytics-choice', {timeout:12000});
       const initialScriptCount = await page.evaluate(() => document.querySelectorAll('script[src*="googletagmanager.com/gtag/js"]').length);
       if (initialScriptCount!==0) throw new Error('Consent violation: tag loaded before permission');
+      // Explicit rejection must persist and must not fetch Google Analytics.
+      if (path === '') {
+        await page.locator('.analytics-choice [data-reject]').click();
+        await page.reload({waitUntil:'domcontentloaded'});
+        await page.waitForSelector('.analytics-settings');
+        const rejected = await page.evaluate(() => ({
+          choice:localStorage.getItem('minjae_analytics_choice_v1'),
+          tagCount:document.querySelectorAll('script[src*="googletagmanager.com/gtag/js"]').length,
+          gtagType:typeof window.gtag
+        }));
+        if (rejected.choice !== 'no' || rejected.tagCount !== 0 || rejected.gtagType !== 'undefined')
+          throw new Error('Refusal does not block GA4: '+JSON.stringify(rejected));
+        await page.locator('.analytics-settings').click();
+      }
       await page.locator('.analytics-choice [data-accept]').click();
       await page.waitForFunction(() => (window.dataLayer||[]).some(x=>x[0]==='config'),{timeout:15000});
       await page.waitForTimeout(4000);
@@ -53,6 +67,19 @@ try {
       const event = await page.evaluate(() => (window.dataLayer||[]).filter(x=>x[0]==='event').map(x=>x[1]));
       if (!event.includes('naver_booking_click')) throw new Error('Booking custom event absent from dataLayer');
       if (!collect.some(x=>x.id===ID&&x.event==='naver_booking_click')) throw new Error('Booking GA4 collect request not generated');
+      // Check user opt-out after an already initialized GA4 session.
+      if (path === '') {
+        await page.locator('.analytics-settings').click();
+        await page.locator('.analytics-choice [data-reject]').click();
+        await page.waitForLoadState('domcontentloaded');
+        const revoked = await page.evaluate(() => ({
+          choice:localStorage.getItem('minjae_analytics_choice_v1'),
+          tagCount:document.querySelectorAll('script[src*="googletagmanager.com/gtag/js"]').length,
+          gtagType:typeof window.gtag
+        }));
+        if (revoked.choice !== 'no' || revoked.tagCount !== 0 || revoked.gtagType !== 'undefined')
+          throw new Error('Consent revocation does not stop GA4: '+JSON.stringify(revoked));
+      }
       if (errors.length) throw new Error('JavaScript errors: '+JSON.stringify(errors));
       results.push({page:'/'+path,http:response.status(),tag:tagResponses[0].status,events:collect.map(x=>x.event),status:'PASS'});
     } finally {
