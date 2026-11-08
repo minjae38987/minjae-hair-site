@@ -4,21 +4,13 @@ import path from 'node:path';
 const out='naver-audit-results';
 fs.mkdirSync(out,{recursive:true});
 const urls=[
- ['booking','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=details&lang=ko&area=pll'],
- ['search_business','https://search.naver.com/search.naver?query='+encodeURIComponent('에이점헤어 서울대입구역점')],
- ['search_designer','https://search.naver.com/search.naver?query='+encodeURIComponent('에이점헤어 민재 디자이너')],
- ['search_keyword','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자머리')],
- ['place_home','https://m.place.naver.com/hairshop/2074303770/home'],
- ['place_stylist','https://m.place.naver.com/hairshop/2074303770/stylist'],
- ['place_price','https://m.place.naver.com/hairshop/2074303770/price'],
- ['place_reviews','https://m.place.naver.com/hairshop/2074303770/review/visitor'],
- ['booking_menu','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=book&lang=ko&area=pll'],
- ['place_style','https://m.place.naver.com/hairshop/2074303770/style'],
- ['search_downperm','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 다운펌')],
- ['search_menscut','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자 커트')],
- ['search_hairshop','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구역 미용실')],
- ['search_mensperm','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자 펌')]
-];
+ ['search_style_downperm','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 다운펌')],
+ ['search_style_dandy','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 시스루댄디컷')],
+ ['search_style_gail','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 가일컷')],
+ ['search_style_shadow','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 쉐도우펌')],
+ ['search_style_leaf','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 리프컷')],
+ ['search_own_brand','https://search.naver.com/search.naver?query='+encodeURIComponent('에이점헤어 서울대입구역점')]
+]
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 const report=[];
 try{
@@ -46,6 +38,12 @@ try{
      };
      const relevant=await page.locator('a[href]').evaluateAll(nodes=>nodes.filter(a=>/에이점헤어|민재|예약|지도/.test(a.innerText||'')).slice(0,12).map(a=>({text:(a.innerText||'').slice(0,65),href:(a.href||'').slice(0,180)}))).catch(()=>[]);
      entry.relevantLinks=relevant;
+     const normalized=body.replace(/\\s+/g,' ');
+     for(const term of ['인기 스타일리스트','인기스타일리스트','인기 미용실','인기스타일']){
+       const k=normalized.indexOf(term);if(k>=0) entry['section_'+term]=normalized.slice(Math.max(0,k-250),k+2400);
+     }
+     entry.stylistBookingLinks=await page.locator('a[href*="m.booking.naver.com/booking/"]').evaluateAll(nodes=>nodes.slice(0,25).map(a=>({text:(a.innerText||'').trim().slice(0,110),href:a.href.slice(0,150)}))).catch(()=>[]);
+     entry.topText=normalized.slice(0,4800);
      if(name.startsWith('search_')) {
        entry.placeCards=await page.locator('a[href*="m.place.naver.com/hairshop/"]').evaluateAll(nodes=>nodes.slice(0,15).map(a=>({name:(a.innerText||'').trim().slice(0,75),url:a.href.split('?')[0]}))).catch(()=>[]);
        entry.ourPlaceVisible=entry.placeCards.some(a=>a.url.includes('/2074303770'));
