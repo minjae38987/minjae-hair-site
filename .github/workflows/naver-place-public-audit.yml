@@ -2,6 +2,10 @@ name: Naver Place public audit (manual)
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tests/naver-monitor-on-demand.mjs'
+      - '.github/workflows/naver-place-public-audit.yml'
 
 permissions:
   contents: read
