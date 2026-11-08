@@ -1,0 +1,27 @@
+name: GA4 public-site delivery diagnosis
+
+on:
+  pull_request:
+    paths:
+      - 'tests/ga4-live-delivery.mjs'
+      - '.github/workflows/ga4-live-delivery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-ga4-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test dependency
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Test public GitHub Pages site without sending GA4 events
+        run: node tests/ga4-live-delivery.mjs
