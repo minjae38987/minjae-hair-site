@@ -14,6 +14,7 @@ on:
       - 'robots.txt'
       - 'tests/seo-integrity.test.cjs'
       - 'tests/seo-live-site.mjs'
+      - 'tests/naver-public-audit.mjs'
       - 'styles/**'
   push:
     branches: [main]
@@ -28,6 +29,7 @@ on:
       - 'robots.txt'
       - 'tests/seo-integrity.test.cjs'
       - 'tests/seo-live-site.mjs'
+      - 'tests/naver-public-audit.mjs'
       - 'styles/**'
   workflow_dispatch:
 
@@ -76,3 +78,26 @@ jobs:
           node-version: '22'
       - name: Inspect deployed sitemap, crawlability and metadata
         run: node tests/seo-live-site.mjs
+
+  naver-public-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install headless browser
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Inspect only public Naver search and booking pages
+        run: node tests/naver-public-audit.mjs
+      - name: Retain audit screenshots and result JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: naver-public-audit
+          path: naver-audit-results/
+          retention-days: 7
