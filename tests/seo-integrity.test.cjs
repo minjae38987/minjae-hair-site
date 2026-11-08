@@ -95,3 +95,21 @@ test('Home haircut guidance provides distinct user-first help and crawlable styl
   }
   assert.match(section, /m\.booking\.naver\.com\/booking\//);
 });
+
+test('Portfolio images use same-origin GitHub Pages paths and keep accessible alternative text', () => {
+  let imageCount = 0;
+  for (const file of files) {
+    const html = readFileSync(path.join(root, file), 'utf8');
+    assert.ok(!html.includes('raw.githubusercontent.com/minjae38987/minjae-hair-site/main/blogger-media/'), 'Raw GitHub image host remains: '+file);
+    const images = [...html.matchAll(/<img\b[^>]*>/g)].map(m=>m[0]);
+    for (const img of images) {
+      imageCount++;
+      const src = img.match(/\bsrc="([^"]+)"/)?.[1];
+      assert.ok(src?.startsWith(domain+'blogger-media/'), 'Image should use first-party URL: '+file);
+      assert.match(img, /\balt="[^"]+"/, 'Image should have meaningful alt text');
+      assert.match(img, /\bwidth="\d+"/);
+      assert.match(img, /\bheight="\d+"/);
+    }
+  }
+  assert.ok(imageCount >= 6, 'Expected existing portfolio images');
+});
