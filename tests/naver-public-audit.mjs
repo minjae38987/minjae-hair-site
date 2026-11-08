@@ -116,7 +116,7 @@ try{
          entry.partialDownPermListed=/부분\s*다운펌|다운펌\s*25,?000|25,?000원/.test(entry.permMenuExcerpt);
        }
      }
-     await page.screenshot({path:path.join(out,name+'.png'),fullPage:name==='minjae',timeout:14000}).catch(()=>{});
+     await page.screenshot({path:path.join(out,name+'.png'),fullPage:(!name.startsWith('search_') && !name.startsWith('own_place_')),timeout:14000}).catch(()=>{});
    }catch(error){entry.access='error';entry.error=String(error).slice(0,500);}
    entry.failedRequests=failed;
    report.push(entry);
