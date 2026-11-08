@@ -77,6 +77,10 @@ try {
         visibleStyleLabels:(text.match(/최근\s*[\d,]+건 스타일링([\s\S]{0,140})/)?.[1]||'').slice(0,120)
       };
     });
+    if (observation.accessible && (observation.recentStylingDisplay===null || observation.reviewDisplay===null || observation.styleInfoCount===null)) {
+      observation.accessible=false;
+      observation.error='Rendered page lacked one or more required public metrics; omitted rather than counted as zero.';
+    }
     result.stylists.push({name,...observation});
     console.log('NAVER_MONITOR_STYLIST '+JSON.stringify({name,accessible:observation.accessible,recentStylingDisplay:observation.recentStylingDisplay,reviewDisplay:observation.reviewDisplay,styleInfoCount:observation.styleInfoCount}));
     if(!observation.accessible) errors.push(name);
