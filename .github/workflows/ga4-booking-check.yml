@@ -10,6 +10,9 @@ on:
       - '.github/workflows/ga4-booking-check.yml'
       - '.github/workflows/ga4-live-delivery.yml'
       - 'index.html'
+      - 'sitemap.xml'
+      - 'robots.txt'
+      - 'tests/seo-integrity.test.cjs'
       - 'styles/**'
   push:
     branches: [main]
@@ -20,6 +23,9 @@ on:
       - 'tests/ga4-live-delivery.mjs'
       - '.github/workflows/ga4-booking-check.yml'
       - 'index.html'
+      - 'sitemap.xml'
+      - 'robots.txt'
+      - 'tests/seo-integrity.test.cjs'
       - 'styles/**'
   workflow_dispatch:
 
@@ -39,7 +45,7 @@ jobs:
           node --check assets/ga4-consent.js
           node --check assets/booking-analytics.js
           node --check tests/ga4-live-delivery.mjs
-          node --test tests/ga4-booking.test.cjs
+          node --test tests/ga4-booking.test.cjs tests/seo-integrity.test.cjs
   public-site-delivery-diagnosis:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
