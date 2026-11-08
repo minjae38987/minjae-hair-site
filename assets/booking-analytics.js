@@ -28,7 +28,7 @@
     };
     document.dispatchEvent(new CustomEvent(eventName, { detail: data }));
     // Refusal / revocation must never be bypassed by this module.
-    if (window['ga-disable-G-HJ7ZN6WJWH'] === true) return;
+    if (window['ga-disable-G-ZZWKEPMY3W'] === true) return;
     if (typeof window.gtag === 'function') window.gtag('event', eventName, data);
   }, { passive: true });
 })();
