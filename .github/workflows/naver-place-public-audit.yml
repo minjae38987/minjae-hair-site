@@ -1,0 +1,37 @@
+name: Naver Place public audit (manual)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tests/naver-monitor-on-demand.mjs'
+      - '.github/workflows/naver-place-public-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  public-observation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check monitor source syntax
+        run: node --check tests/naver-monitor-on-demand.mjs
+      - name: Install read-only mobile browser
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Inspect anonymous Naver public surfaces
+        run: node tests/naver-monitor-on-demand.mjs
+      - name: Upload report and machine-readable observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: naver-place-public-report
+          path: naver-monitor-output/
+          retention-days: 30
+          if-no-files-found: warn
