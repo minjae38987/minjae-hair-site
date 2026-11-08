@@ -34,6 +34,23 @@ try{
      } else report.warnings.push('Missing category tab: '+tab);
    }catch(e){report.warnings.push('Failed tab '+tab+': '+String(e).slice(0,160));}
  }
+ // Date navigation does not create a reservation. Inspect only enabled calendar dates and visible time labels.
+ report.calendarDates=[];
+ for(const day of [9,10,11,12,16,17,18,23,24,25]){
+   try{
+     const btn=page.getByRole('button',{name:String(day),exact:true}).first();
+     if(!(await btn.count())){report.calendarDates.push({day,status:'date-button-not-found'});continue;}
+     if(await btn.isDisabled()){report.calendarDates.push({day,status:'disabled'});continue;}
+     await btn.click({timeout:3500});
+     await page.waitForTimeout(850);
+     const body=await page.locator('body').innerText().catch(()=>'');
+     const beforeMenu=body.split('시술 메뉴를 선택해 주세요')[0]||'';
+     const windowText=beforeMenu.slice(Math.max(0,beforeMenu.indexOf('날짜와 시간을 선택해 주세요'))).slice(-800);
+     const matches=[...windowText.matchAll(/\b([0-9]{1,2}:[0-9]{2})\b/g)].map(m=>m[1]);
+     report.calendarDates.push({day,status:'enabled',timeLabels:[...new Set(matches)],timeText:windowText.slice(-500),securityChallenge:challenge(body)});
+     console.log('NAVER_BOOKING_DATE '+JSON.stringify(report.calendarDates[report.calendarDates.length-1]));
+   }catch(e){report.calendarDates.push({day,status:'incomplete',error:String(e).slice(0,180)});}
+ }
  // Do not select an appointment slot. Try only the next-stage UI with a sample cut menu selection.
  try{
    const c=page.getByText('컷',{exact:true}).first(); if(await c.count()) await c.click({timeout:3500});
