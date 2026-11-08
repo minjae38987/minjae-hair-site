@@ -1,0 +1,47 @@
+import { chromium } from 'playwright';
+import fs from 'node:fs';
+import path from 'node:path';
+const out='naver-audit-results';
+fs.mkdirSync(out,{recursive:true});
+const urls=[
+ ['booking','https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768?theme=place&tab=details&lang=ko&area=pll'],
+ ['search_business','https://search.naver.com/search.naver?query='+encodeURIComponent('에이점헤어 서울대입구역점')],
+ ['search_designer','https://search.naver.com/search.naver?query='+encodeURIComponent('에이점헤어 민재 디자이너')],
+ ['search_keyword','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 남자머리')]
+];
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const report=[];
+try{
+ for(const [name,url] of urls){
+   const ctx=await browser.newContext({viewport:{width:390,height:844},locale:'ko-KR',timezoneId:'Asia/Seoul',userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'});
+   const page=await ctx.newPage();const failed=[];
+   page.on('requestfailed',req=>{if(failed.length<8)failed.push({domain:new URL(req.url()).hostname,reason:req.failure()?.errorText});});
+   const entry={name,url,access:'unknown'};
+   try{
+     const res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:35000});
+     await page.waitForTimeout(4500);
+     entry.status=res?.status()||null;entry.finalUrl=page.url();
+     entry.title=(await page.title()).slice(0,160);
+     const body=(await page.locator('body').innerText({timeout:12000}).catch(()=>''));entry.textLength=body.length;
+     entry.visibleExcerpt=body.replace(/\\s+/g,' ').slice(0,1700);
+     entry.access=body.length>100?'rendered':'limited';
+     entry.flags={
+       hasShop:body.includes('에이점헤어'),
+       hasDesigner:body.includes('민재'),
+       hasBooking:body.includes('예약'),
+       hasPrice:body.includes('원'),
+       hasReview:body.includes('리뷰'),
+       hasCaptcha:/자동입력|비정상적인 접근|접근이 제한|captcha|로봇|보안문자/i.test(body)
+     };
+     const relevant=await page.locator('a[href]').evaluateAll(nodes=>nodes.filter(a=>/에이점헤어|민재|예약|지도/.test(a.innerText||'')).slice(0,12).map(a=>({text:(a.innerText||'').slice(0,65),href:(a.href||'').slice(0,180)}))).catch(()=>[]);
+     entry.relevantLinks=relevant;
+     await page.screenshot({path:path.join(out,name+'.png'),fullPage:false,timeout:14000}).catch(()=>{});
+   }catch(error){entry.access='error';entry.error=String(error).slice(0,500);}
+   entry.failedRequests=failed;
+   report.push(entry);
+   console.log('NAVER_PUBLIC_AUDIT '+JSON.stringify(entry));
+   await ctx.close();
+ }
+}finally{await browser.close();}
+fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({checkedAt:new Date().toISOString(),results:report},null,2));
+console.log('NAVER_PUBLIC_AUDIT_SUMMARY '+JSON.stringify(report.map(x=>({name:x.name,status:x.status,access:x.access,flags:x.flags,finalUrl:x.finalUrl}))));
