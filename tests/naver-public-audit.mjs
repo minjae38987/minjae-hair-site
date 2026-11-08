@@ -28,7 +28,9 @@ const urls=[
  ['search_drop','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 드롭컷')],
  ['search_leaf','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 리프컷')],
  ['search_filler','https://search.naver.com/search.naver?query='+encodeURIComponent('서울대입구 필러스컷')]
-]
+ ];
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const report=[];
 try{
  for(const [name,url] of urls){
    const ctx=await browser.newContext({viewport:{width:390,height:844},locale:'ko-KR',timezoneId:'Asia/Seoul',userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'});
