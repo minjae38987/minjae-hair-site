@@ -11,6 +11,16 @@ on:
       - '.github/workflows/ga4-live-delivery.yml'
       - 'index.html'
       - 'styles/**'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/booking-analytics.js'
+      - 'assets/ga4-consent.js'
+      - 'tests/ga4-booking.test.cjs'
+      - 'tests/ga4-live-delivery.mjs'
+      - '.github/workflows/ga4-booking-check.yml'
+      - 'index.html'
+      - 'styles/**'
   workflow_dispatch:
 
 permissions:
@@ -25,8 +35,13 @@ jobs:
         with:
           node-version: '22'
       - name: Check analytics modules and event routing
-        run: node --test tests/ga4-booking.test.cjs
+        run: |
+          node --check assets/ga4-consent.js
+          node --check assets/booking-analytics.js
+          node --check tests/ga4-live-delivery.mjs
+          node --test tests/ga4-booking.test.cjs
   public-site-delivery-diagnosis:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
