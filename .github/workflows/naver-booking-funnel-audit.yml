@@ -1,0 +1,37 @@
+name: Naver Booking Funnel Public Audit (read only)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/naver-booking-funnel-readonly.mjs'
+      - '.github/workflows/naver-booking-funnel-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-booking-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check audit script
+        run: node --check tests/naver-booking-funnel-readonly.mjs
+      - name: Install mobile headless browser
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Inspect booking UI without submitting reservation
+        run: node tests/naver-booking-funnel-readonly.mjs
+      - name: Save public page evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: naver-booking-funnel-audit
+          path: naver-booking-funnel-results/
+          retention-days: 14
+          if-no-files-found: warn
