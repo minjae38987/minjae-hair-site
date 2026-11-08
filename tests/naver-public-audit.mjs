@@ -13,7 +13,9 @@ const urls=[
  ['competitor_view_style_down','https://m.place.naver.com/hairshop/1894939931/styleInfo/54128409'],
  ['competitor_view_style_down2','https://m.place.naver.com/hairshop/1894939931/styleInfo/46293658'],
  ['competitor_mande_stylist','https://m.place.naver.com/hairshop/1319077518/stylist']
-]
+];
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const report=[];
 try{
  for(const [name,url] of urls){
    const ctx=await browser.newContext({viewport:{width:390,height:844},locale:'ko-KR',timezoneId:'Asia/Seoul',userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'});
