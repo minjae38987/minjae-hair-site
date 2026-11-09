@@ -24,12 +24,19 @@ try{
  audit.status=res?.status()??null;
  await page.waitForTimeout(3500);
  await capture('01-open');
+ // Public branch selection only. No credentials and no login submission.
+ const seoul=page.getByRole('button',{name:'서울대입구점',exact:true}).first();
+ if(await seoul.count() && await seoul.isVisible()){
+   await seoul.click({timeout:5000});
+   await page.waitForTimeout(1000);
+   await capture('02-seoul-branch-selected');
+ }
  // Public UI only. Do not fill forms, submit login, contact APIs, or bypass authentication.
  const login=page.getByRole('button',{name:/로그인|log\s*in|sign\s*in/i}).first();
  if(await login.count() && await login.isVisible()){
    await login.click({timeout:5000});
    await page.waitForTimeout(900);
-   await capture('02-public-login-dialog');
+   await capture('03-public-login-dialog');
  } else audit.warnings.push('No immediately visible login button. Public initial screen captured only.');
 }catch(e){audit.warnings.push(String(e).slice(0,250));}
 finally{
