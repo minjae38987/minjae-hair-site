@@ -44,6 +44,13 @@ class BrandStrategyTests(unittest.TestCase):
     def test_invalid_date_rejected(self):
         x=copy.deepcopy(FIXTURE);x["competitors"][0]["observed_at"]="2026-11-33"
         with self.assertRaises(ValueError):validate(x)
+    def test_15_segment_channel_strategies(self):
+        plan=analyze(FIXTURE)["channel_segment_plan"]
+        self.assertEqual(len(plan),15)
+        self.assertEqual(len({(p["segment_id"],p["channel"]) for p in plan}),15)
+        self.assertTrue(all(not p["proof_verified"] and p["measured_value"] is None for p in plan))
+        self.assertTrue(all(not p["publish_approved"] for p in plan))
+
     def test_customer_segments(self):
         o=analyze(FIXTURE)
         self.assertEqual(len(o["customer_segments"]),3)
