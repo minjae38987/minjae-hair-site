@@ -1,0 +1,35 @@
+name: Marketing funnel report checks
+on:
+  pull_request:
+    paths:
+      - 'scripts/marketing_funnel_report.py'
+      - 'tests/test_marketing_funnel_report.py'
+      - 'marketing/**'
+      - '.github/workflows/marketing-funnel-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/marketing_funnel_report.py'
+      - 'tests/test_marketing_funnel_report.py'
+      - 'marketing/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aggregate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and test
+        run: |
+          python3 -m py_compile scripts/marketing_funnel_report.py
+          python3 -m unittest discover -s tests -p 'test_marketing_funnel_report.py' -v
+      - name: Generate aggregate-only sample
+        run: |
+          python3 scripts/marketing_funnel_report.py --input marketing/funnel-input-template.csv --output output/marketing-funnel-report.md --target 100
+          test -s output/marketing-funnel-report.md
