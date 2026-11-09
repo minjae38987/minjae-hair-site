@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import ssl
+import subprocess
 import sys
 import time
 import urllib.error
@@ -23,7 +24,7 @@ TOKEN_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "github_token"
 STATE_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "last_comment_id"
 PREFIX = "ISH_V2_REQUEST "
 RESULT = "ISH_V2_RESULT "
-ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV"))
+ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG"))
 
 def api(method, path, token, payload=None):
     data = json.dumps(payload, ensure_ascii=False).encode() if payload is not None else None
@@ -102,9 +103,30 @@ def lumi_js_meta():
             "auth_token_count":data.lower().count("auth"),
             "fetch_token_count":data.count("fetch(")}
             
+def git_diag():
+    folder = Path("/root/minjae-ai-hub")
+    diag = {"repo_folder_exists": folder.exists(),
+            "git_directory_exists": (folder / ".git").exists()}
+    if not diag["git_directory_exists"]:
+        return diag
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    tests = {
+        "local_worktree": ["git", "-C", str(folder), "rev-parse", "--is-inside-work-tree"],
+        "remote_read": ["git", "-C", str(folder), "ls-remote", "--heads", "origin"],
+    }
+    for name, args in tests.items():
+        try:
+            r = subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=12, env=env, check=False)
+            diag[name] = "OK" if r.returncode == 0 else "FAILED_EXIT_" + str(r.returncode)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            diag[name] = type(e).__name__
+    return diag
+
 def run_action(action):
     if action == "PING": return {"bridge":"online","python":sys.version.split()[0],"github_actions_used":False}
     if action == "PYTHON_ENV": return {"python":sys.version.split()[0],"platform":sys.platform}
+    if action == "GIT_DIAG": return git_diag()
     if action == "LUMI_PUBLIC": return lumi_public()
     if action == "LUMI_JS_META": return lumi_js_meta()
     raise ValueError("허용되지 않는 명령")
