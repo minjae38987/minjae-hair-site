@@ -1,0 +1,114 @@
+{
+  "schema_version": "individual_brand_evidence_v1",
+  "owner": {
+    "id": "minjae",
+    "comparison_keywords": [
+      "두상",
+      "모질",
+      "상담",
+      "손질",
+      "다운펌",
+      "필러스",
+      "드롭",
+      "가일",
+      "시스루",
+      "리프"
+    ]
+  },
+  "competitors": [
+    {
+      "designer_id": "seo_in",
+      "name": "서인",
+      "salon": "웨일라이트",
+      "observed_at": "2026-11-05",
+      "source_type": "naver_profile_snapshot",
+      "source_url": "https://github.com/minjae38987/-2/blob/main/analysis/naver/profile-linkage.json",
+      "claims": [
+        "남성 1:1 맞춤 상담",
+        "두상 모질 얼굴형 손질"
+      ],
+      "styles": [
+        "슬릭컷",
+        "아이롱펌"
+      ],
+      "review_count": 123,
+      "styling_count": 72
+    },
+    {
+      "designer_id": "lee_seunghoon",
+      "name": "이승훈",
+      "salon": "웨일라이트",
+      "observed_at": "2026-11-05",
+      "source_type": "naver_profile_snapshot",
+      "source_url": "https://github.com/minjae38987/-2/blob/main/analysis/naver/profile-linkage.json",
+      "claims": [
+        "충분히 듣는 1:1 상담"
+      ],
+      "styles": [
+        "다운펌",
+        "슬릭백",
+        "리프컷",
+        "필러스컷"
+      ],
+      "review_count": 86,
+      "styling_count": 123
+    },
+    {
+      "designer_id": "kim_yumin",
+      "name": "김유민",
+      "salon": "웨일라이트",
+      "observed_at": "2026-11-05",
+      "source_type": "naver_profile_snapshot",
+      "source_url": "https://github.com/minjae38987/-2/blob/main/analysis/naver/profile-linkage.json",
+      "claims": [
+        "유행보다 어울리는 방향"
+      ],
+      "styles": [
+        "드롭컷",
+        "다운펌",
+        "볼륨매직"
+      ],
+      "review_count": 113,
+      "styling_count": 100
+    },
+    {
+      "designer_id": "mande_gon",
+      "name": "곤",
+      "salon": "맨드살롱 서울대입구점",
+      "observed_at": "2026-11-09",
+      "source_type": "third_party_mirror",
+      "source_url": "https://imginn.com/p/CmgubykvNxS/",
+      "claims": [
+        "모발과 두상에 맞춰 시술",
+        "남자 짧은 머리"
+      ],
+      "styles": [
+        "드롭컷",
+        "필러스컷",
+        "가일컷"
+      ],
+      "review_count": null,
+      "styling_count": null
+    },
+    {
+      "designer_id": "mande_minjeong",
+      "name": "민정",
+      "salon": "맨드살롱 서울대입구점",
+      "observed_at": "2026-11-09",
+      "source_type": "third_party_mirror",
+      "source_url": "https://www.pixnoy.com/profile/mandesalon_mjung/",
+      "claims": [
+        "모질별 스타일",
+        "남성 디자인"
+      ],
+      "styles": [
+        "시스루댄디",
+        "숏가일",
+        "필러스컷",
+        "쉐도우펌"
+      ],
+      "review_count": null,
+      "styling_count": null
+    }
+  ]
+}
