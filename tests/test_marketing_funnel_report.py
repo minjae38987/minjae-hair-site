@@ -22,7 +22,7 @@ class FunnelReportTest(unittest.TestCase):
     def test_reject_negative_value(self):
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/"bad.csv"
-            path.write_text(",".join(FIELDS)+"\\n2026-11-09,instagram,0,0,0,0,-1,0\\n",encoding="utf-8")
+            path.write_text(",".join(FIELDS)+"\n2026-11-09,instagram,0,0,0,0,-1,0\n",encoding="utf-8")
             with self.assertRaises(ValueError):
                 load_rows(path)
 
