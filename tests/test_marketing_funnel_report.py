@@ -17,7 +17,14 @@ class FunnelReportTest(unittest.TestCase):
             output=report(load_rows(path))
             self.assertIn("4/100명",output)
             self.assertIn("300 | 50 | 8 | 6 | 3 | 3000",output)
-            self.assertIn("N/A",report([]))
+            self.assertIn("미측정 (입력된 실적 없음)",report([]))
+            self.assertNotIn("0/100명", report([]))
+
+    def test_confirmed_zero_distinct_from_missing(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/"verified-zero.csv"
+            path.write_text(",".join(FIELDS)+"\n2026-11-09,website,0,0,0,0,0,0\n",encoding="utf-8")
+            self.assertIn("0/100명",report(load_rows(path)))
 
     def test_reject_negative_value(self):
         with tempfile.TemporaryDirectory() as d:
