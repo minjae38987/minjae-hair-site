@@ -30,6 +30,12 @@ try{
    await seoul.click({timeout:5000});
    await page.waitForTimeout(1000);
    await capture('02-seoul-branch-selected');
+   const staff=page.getByRole('button',{name:'민재',exact:true}).first();
+   if(await staff.count() && await staff.isVisible()){
+     await staff.click({timeout:5000});
+     await page.waitForTimeout(800);
+     await capture('03-minjae-auth-choices');
+   }
  }
  // Public UI only. Do not fill forms, submit login, contact APIs, or bypass authentication.
  const login=page.getByRole('button',{name:/로그인|log\s*in|sign\s*in/i}).first();
