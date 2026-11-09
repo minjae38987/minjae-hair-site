@@ -6,6 +6,7 @@ import getpass
 import html.parser
 import json
 import os
+import re
 from pathlib import Path
 import ssl
 import subprocess
@@ -24,7 +25,7 @@ TOKEN_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "github_token"
 STATE_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "last_comment_id"
 PREFIX = "ISH_V2_REQUEST "
 RESULT = "ISH_V2_RESULT "
-ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG"))
+ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG", "LUMI_AUTH_MAP"))
 
 def api(method, path, token, payload=None):
     data = json.dumps(payload, ensure_ascii=False).encode() if payload is not None else None
@@ -103,6 +104,35 @@ def lumi_js_meta():
             "auth_token_count":data.lower().count("auth"),
             "fetch_token_count":data.count("fetch(")}
             
+
+def lumi_auth_map():
+    """Static inspection of published frontend JS. Never send code snippets or secrets."""
+    info = lumi_public()
+    scripts = info.get("script_paths", [])
+    if not scripts:
+        return {"app_script_found":False}
+    script_path = scripts[0]
+    if not script_path.startswith("/assets/") or not script_path.endswith(".js"):
+        return {"app_script_found":False,"reason":"non_js_asset"}
+    req = urllib.request.Request(HOST + script_path,
+                                 headers={"User-Agent":"minjae-ish-readonly-bridge-v2"})
+    with urllib.request.urlopen(req, timeout=30) as res:
+        raw = res.read(5500001)
+    if len(raw) > 5500000:
+        return {"app_script_found":True,"size_limit_exceeded":True}
+    data = raw.decode("utf-8","replace")
+    terms = ("fetch(", "axios", "XMLHttpRequest", "localStorage", "sessionStorage",
+             "credentials:", "Authorization", "Bearer ", "supabase", "firebase",
+             "signInWith", "password", "로그인", "비밀번호", "직원 로그인", "관리자",
+             "서울대입구점")
+    counts = {term:len(re.findall(re.escape(term),data,re.I)) for term in terms}
+    # Only publish fixed-format counters, not embedded URLs, source text or credentials.
+    return {"app_script_found":True,"js_bytes":len(raw),
+            "authentication_hint_counts":counts,
+            "login_method":"UNVERIFIED",
+            "official_api_availability":"UNVERIFIED",
+            "analysis_scope":"public_static_frontend_only"}
+
 def git_diag():
     folder = Path("/root/minjae-ai-hub")
     diag = {"repo_folder_exists": folder.exists(),
@@ -129,6 +159,7 @@ def run_action(action):
     if action == "GIT_DIAG": return git_diag()
     if action == "LUMI_PUBLIC": return lumi_public()
     if action == "LUMI_JS_META": return lumi_js_meta()
+    if action == "LUMI_AUTH_MAP": return lumi_auth_map()
     raise ValueError("허용되지 않는 명령")
 
 def comments(token):
