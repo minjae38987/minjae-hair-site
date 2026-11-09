@@ -134,6 +134,42 @@ def _copy():
       },
     }
 
+def build_channel_segment_plan():
+    """Cross three customer problems with five channels without inventing outcomes."""
+    hooks={
+      "side_hair":"옆머리, 왜 자르고 나면 또 뜰까요?",
+      "flat_straight":"직모라서 앞머리 볼륨이 금방 가라앉을까요?",
+      "style_uncertainty":"그 사진, 내 모질에서도 가능할까요?"
+    }
+    channel_contract={
+      "naver_place":("comparison_booking","가격·위치·개인 상담·실제 후기와 예약 동선 비교","naver_personal_booking"),
+      "naver_blog":("search_consideration","원인과 시술 선택을 자세히 확인하고 싶은 검색","public_blog_search_and_booking"),
+      "instagram":("visual_discovery","전후 변화와 신뢰 단서를 짧게 확인","profile_link_interaction"),
+      "youtube_shorts":("short_form_discovery","첫 2초의 고객 문제 인식과 기술 설명","profile_link_interaction"),
+      "website":("evaluation_booking","상담 논리·실제 결과·선택 조건을 비교","ga4_booking_click_event_only")
+    }
+    plans=[]
+    for sid,name,question,answer in SEGMENTS:
+        for channel in CHANNELS:
+            stage,intent,metric=channel_contract[channel]
+            plans.append({
+                "segment_id":sid,"customer_problem":name,"channel":channel,
+                "funnel_stage":stage,"customer_intent_hypothesis":intent,
+                "hook_draft":hooks[sid],
+                "one_message":answer,
+                "proof_required":["consented_same_customer_before","verified_service_choice_reason",
+                                  "consented_same_customer_after","home_styling_guidance"],
+                "proof_verified":False,
+                "cta":_copy()[channel]["cta"],
+                "primary_measure":metric,
+                "measured_value":None,
+                "paid_new_customer_attribution":None,
+                "experiment_status":"not_run",
+                "publish_approved":False
+            })
+    return plans
+
+
 def analyze(data):
     validate(data)
     overlap=_overlaps(data)
@@ -174,6 +210,7 @@ def analyze(data):
                 "unique_skill_proven":False,"market_advantage_proven":False},
        "roles":roles,"individual_competitors":overlap,
        "customer_segments":segments,"channel_copy":copy,
+       "channel_segment_plan":build_channel_segment_plan(),
        "quality":{"pass":False,"blockers":issues,"caveats":source_caveats,
                   "publication_approved":False,"media_production_approved":False},
        "conversion":{"paid_new_customers":None,"booking_completed":None,
