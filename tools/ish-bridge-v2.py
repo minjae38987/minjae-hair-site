@@ -25,7 +25,7 @@ TOKEN_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "github_token"
 STATE_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "last_comment_id"
 PREFIX = "ISH_V2_REQUEST "
 RESULT = "ISH_V2_RESULT "
-ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG", "LUMI_AUTH_MAP", "TASK_PLAN_V1", "CAPABILITIES"))
+ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG", "LUMI_AUTH_MAP", "TASK_PLAN_V1", "CAPABILITIES", "LUMI_LOGIN_FLOW"))
 PLAN_STEPS = frozenset(("ping", "python_env", "git_diag", "lumi_public", "lumi_js_meta", "lumi_auth_map", "lumi_public_js_terms"))
 FIXED_JS_TERMS = frozenset(("login","password","auth","fetch(","localStorage","sessionStorage","Authorization","Bearer ","signInWith","axios","XMLHttpRequest","csrf","cookie"))
 
@@ -135,6 +135,41 @@ def lumi_auth_map():
             "official_api_availability":"UNVERIFIED",
             "analysis_scope":"public_static_frontend_only"}
 
+
+def lumi_login_flow():
+    """Bounded public JS authentication-route inventory, not an authentication attempt."""
+    info=lumi_public()
+    paths=info.get("script_paths",[])
+    if not paths or not paths[0].startswith("/assets/") or not paths[0].endswith(".js"):
+        return {"status":"script_not_found"}
+    req=urllib.request.Request(HOST+paths[0],headers={"User-Agent":"minjae-ish-readonly-bridge-v2"})
+    with urllib.request.urlopen(req,timeout=30) as res:
+        raw=res.read(5500001)
+    if len(raw)>5500000: return {"status":"bundle_too_large"}
+    source=raw.decode("utf-8","replace")
+    # Search only public code for conventional authentication and API method names.
+    identifiers=("signInWithPassword","signInWithEmailAndPassword","signInWithOAuth",
+                 "signInAnonymously","onAuthStateChanged","getIdToken",
+                 "createClient","createBrowserClient","getSession",
+                 "signOut","setSession","getUser","onAuthStateChange",
+                 "localStorage","sessionStorage","Authorization","Bearer ",
+                 "fetch(","XMLHttpRequest","axios","firebase","supabase")
+    counts={name:source.count(name) for name in identifiers if name in source}
+    # Extract public absolute URL hostnames only; do not return paths, queries or token strings.
+    hosts=set()
+    for m in re.finditer(r'https?://[A-Za-z0-9][A-Za-z0-9.:-]{2,120}',source):
+        try:
+            host=urllib.parse.urlsplit(m.group()).hostname
+            if host and re.fullmatch(r'[a-zA-Z0-9.-]{3,100}',host):
+                hosts.add(host.lower())
+        except ValueError:
+            pass
+    # Keep only a short fixed sample of host names; not app source or credentials.
+    return {"bundle_bytes":len(raw),"login_identifier_counts":counts,
+            "public_url_hostnames":sorted(hosts)[:25],
+            "authenticated":False,"customer_data_read":False,
+            "api_contract_verified":False}
+
 def git_diag():
     folder = Path("/root/minjae-ai-hub")
     diag = {"repo_folder_exists": folder.exists(),
@@ -208,6 +243,7 @@ def run_action(action, request=None):
     if action == "LUMI_PUBLIC": return lumi_public()
     if action == "LUMI_JS_META": return lumi_js_meta()
     if action == "LUMI_AUTH_MAP": return lumi_auth_map()
+    if action == "LUMI_LOGIN_FLOW": return lumi_login_flow()
     raise ValueError("허용되지 않는 명령")
 
 def comments(token, since_id=0):
