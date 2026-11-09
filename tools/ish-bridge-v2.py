@@ -25,6 +25,9 @@ TOKEN_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "github_token"
 STATE_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "last_comment_id"
 PREFIX = "ISH_V2_REQUEST "
 RESULT = "ISH_V2_RESULT "
+DUAL_PREFIX = "HAIR_JOB_V1 "
+DUAL_RESULT = "HAIR_JOB_RESULT_V1 "
+DUAL_ALLOWED = frozenset(("PING","LUMI_PUBLIC","GIT_DIAG","PYTHON_ENV","LUMI_AUTH_MAP","LUMI_LOGIN_FLOW"))
 SHARED_PREFIX = "MINJAE_JOB_V1 "
 SHARED_RESULT = "MINJAE_RESULT_V1 "
 SHARED_TASKS = frozenset(("HEALTH_CHECK", "LUMI_PUBLIC"))
@@ -239,7 +242,7 @@ def task_plan(request):
 
 def run_action(action, request=None):
     if action == "TASK_PLAN_V1": return task_plan(request or {})
-    if action == "CAPABILITIES": return {"allowed_actions":sorted(ACTIONS),"plan_steps":sorted(PLAN_STEPS),"arbitrary_shell":False,"github_actions_required":False}
+    if action == "CAPABILITIES": return {"allowed_actions":sorted(ACTIONS),"plan_steps":sorted(PLAN_STEPS),"dual_runner_jobs":sorted(DUAL_ALLOWED),"arbitrary_shell":False,"github_actions_required":False}
     if action == "PING": return {"bridge":"online","python":sys.version.split()[0],"github_actions_used":False}
     if action == "PYTHON_ENV": return {"python":sys.version.split()[0],"platform":sys.platform}
     if action == "GIT_DIAG": return git_diag()
@@ -308,6 +311,34 @@ def checkpoint_set(value):
     tmp.write_text(str(value))
     tmp.replace(STATE_FILE)
 
+def dual_job(token, body):
+    """Fixed-schema iSH jobs; never accept arbitrary shell, URLs or credentials."""
+    try:
+        if len(body)>1000: raise ValueError("job_too_long")
+        job=json.loads(body[len(DUAL_PREFIX):].strip())
+        if not isinstance(job,dict) or set(job)!={"id","runner","task"}:
+            raise ValueError("invalid_job_schema")
+        jid=job["id"]
+        if not isinstance(jid,str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}",jid):
+            raise ValueError("invalid_id")
+        if job["runner"]!="ish" or job["task"] not in DUAL_ALLOWED:
+            # An Actions-targeted message is never executed by iSH.
+            return
+        task=job["task"]
+        try:
+            data=run_action(task)
+            status="OK"
+        except Exception:
+            data={}
+            status="EXECUTION_ERROR"
+        payload={"protocol":"HAIR_JOB_RESULT_V1","id":jid,"runner":"ish",
+                 "task":task,"status":status,"details":data}
+        api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),token,
+            {"body":DUAL_RESULT+json.dumps(payload,ensure_ascii=False,separators=(",",":"))})
+        print("Dual job:",jid,task,status,flush=True)
+    except (ValueError,TypeError,KeyError,json.JSONDecodeError):
+        print("Invalid dual job ignored",flush=True)
+
 def poll(token):
     last=checkpoint_get()
     try:
@@ -342,6 +373,9 @@ def poll(token):
                       "status":"ERROR","data":{"type":type(exc).__name__}}
                 send_shared(token,fail)
                 print("공통 작업 오류:",ident,type(exc).__name__,flush=True)
+            checkpoint_set(ident);last=ident;continue
+        if body.startswith(DUAL_PREFIX):
+            dual_job(token,body)
             checkpoint_set(ident);last=ident;continue
         if not body.startswith(PREFIX):
             checkpoint_set(ident);last=ident;continue
