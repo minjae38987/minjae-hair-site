@@ -59,3 +59,65 @@ test('Booking click tracking is consent gated and distinguishes placements', () 
   assert.equal(sent.length,4);
   assert.equal(emitted.length,6);
 });
+
+test('Explicit QA link marks booking events but unmarked visits remain unclassified', () => {
+  const sent = [];
+  let handler;
+  const storage = new Map();
+  const sessionStorage = {
+    setItem(k,v){storage.set(k,v);},
+    getItem(k){return storage.get(k) || null;},
+    removeItem(k){storage.delete(k);}
+  };
+  const window = {
+    location:{ pathname:'/minjae-hair-site/', search:'?analytics_qa=1' },
+    sessionStorage, gtag:(...args)=>sent.push(args)
+  };
+  const anchor={
+    href:'https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768',
+    closest(q){ return q==='a[href]' ? this : null; }
+  };
+  const document = {
+    baseURI:'https://minjae38987.github.io/minjae-hair-site/',
+    addEventListener:(name,fn)=>{if(name==='click')handler=fn;},
+    dispatchEvent:()=>{}
+  };
+  vm.runInNewContext(tracking,{document,window,URL,URLSearchParams,CustomEvent:class{}});
+  handler({target:anchor});
+  assert.equal(sent[0][2].traffic_validation_status,'qa_marked');
+  assert.equal(sent[0][0],'event');
+  assert.equal(sent[0][1],'naver_booking_click');
+  window.location.search='';
+  handler({target:anchor});
+  assert.equal(sent[1][2].traffic_validation_status,'qa_marked');
+  window.location.search='?analytics_qa=0';
+  handler({target:anchor});
+  assert.equal(sent[2][2].traffic_validation_status,'unclassified');
+  assert.equal(storage.has('minjae_analytics_qa_v1'),false);
+  window.location.search='';
+  handler({target:anchor});
+  assert.equal(sent[3][2].traffic_validation_status,'unclassified');
+});
+
+test('Consent revoked suppresses GA4 booking click even when marked QA', () => {
+  let handler;
+  const sent=[];
+  const window={
+    location:{pathname:'/',search:'?analytics_qa=1'},
+    sessionStorage:{setItem(){},getItem(){return null;},removeItem(){}},
+    'ga-disable-G-HJ7ZN6WJWH':true,
+    gtag:(...args)=>sent.push(args)
+  };
+  const anchor={
+    href:'https://m.booking.naver.com/booking/13/bizes/1512690/items/8096768',
+    closest(q){return q==='a[href]' ? this : null;}
+  };
+  const document={
+    baseURI:'https://minjae38987.github.io/minjae-hair-site/',
+    addEventListener:(name,fn)=>{if(name==='click')handler=fn;},
+    dispatchEvent:()=>{}
+  };
+  vm.runInNewContext(tracking,{document,window,URL,URLSearchParams,CustomEvent:class{}});
+  handler({target:anchor});
+  assert.equal(sent.length,0);
+});
