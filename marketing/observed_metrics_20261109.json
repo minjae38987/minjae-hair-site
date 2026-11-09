@@ -1,0 +1,24 @@
+{
+  "schema_version": "observed_metrics_v1",
+  "periods": [
+    {
+      "period": "2026-11-07 website GA4",
+      "views": null,
+      "profile_visits": null,
+      "booking_clicks": null,
+      "paid_customers": null
+    },
+    {
+      "period": "2026-11-08 website GA4",
+      "views": null,
+      "profile_visits": null,
+      "booking_clicks": 17,
+      "paid_customers": null
+    }
+  ],
+  "metadata": {
+    "observed_source": "Windsor.ai connected GA4 property 563083363",
+    "note": "booking_clicks are GA4 events, not unique users or bookings. No live confirmed paid customers.",
+    "not_video_metrics": true
+  }
+}
