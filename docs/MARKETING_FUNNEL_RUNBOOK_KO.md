@@ -10,8 +10,8 @@
 - GA4 `naver_booking_click`: 네이버 예약 링크 클릭 **의도**만 측정. 예약 완료·유료 방문으로 표시하면 안 됩니다.
 
 ## 작업 방법
-1. `marketing/funnel-input-template.csv`를 복사하여 날짜별로 작성합니다. 한 행은 **하루 × 유입 채널**의 합계입니다.
-2. 노출·클릭 데이터는 해당 SNS/웹 채널에서 가져옵니다. 접근 불가하면 함부로 0으로 채우지 않고 수집 불가 항목을 별도 기록합니다.
+1. `marketing/funnel-input-template.csv`는 **헤더만 있는 빈 입력 양식**입니다. 수치를 측정한 뒤에만 날짜별 행을 추가합니다. 한 행은 **하루 × 유입 채널**의 합계입니다.
+2. 노출·클릭 데이터는 해당 SNS/웹 채널에서 가져옵니다. V1은 행 안에서 공란을 지원하지 않으므로 모든 열의 관측값이 준비된 경우에만 행을 입력합니다. 미측정 기간은 행을 입력하지 않으며 V2의 공란/null 구분 방식 사용을 권장합니다.
 3. 확정 예약은 네이버 예약에서, **유료 신규 방문**은 실제 매장 집계에서 확인합니다.
 4. 고객이 어디서 발견했는지 불명확하면 채널을 `unknown`으로 분류합니다. 중복 추적할 수 없다면 고객을 여러 채널에 중복 계산하지 마세요.
 5. 실행: `python3 scripts/marketing_funnel_report.py --input marketing/funnel-input-template.csv --output output/marketing-funnel-report.md --target 100`
