@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/probe-lumi-public.yml'
+      - 'tests/lumi-public-login-render.mjs'
   workflow_dispatch:
 
 permissions:
@@ -69,3 +70,21 @@ jobs:
           print('PUBLIC_BUTTON_COUNT',len(p.buttons))
           print('PUBLIC_ROOT_APP_MARKERS',{name:(name in raw) for name in ['id="root"','id="app"','__NEXT_DATA__','/_next/','/assets/']})
           PY
+      - name: Set up Node for browser-only public rendering
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser dependencies
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Render publicly accessible Lumi login UI
+        run: node tests/lumi-public-login-render.mjs
+      - name: Retain public screenshot and metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumi-public-login-audit
+          path: lumi-public-render/
+          retention-days: 7
+          if-no-files-found: warn
