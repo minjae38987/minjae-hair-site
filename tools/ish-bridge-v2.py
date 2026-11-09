@@ -138,8 +138,12 @@ def comments(token):
 
 def send(token, request_id, status, data):
     payload = {"request_id":request_id,"status":status,"data":data}
-    api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),token,
-        {"body":RESULT + json.dumps(payload,ensure_ascii=False,separators=(",",":"))})
+    try:
+        api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),token,
+            {"body":RESULT + json.dumps(payload,ensure_ascii=False,separators=(",",":"))})
+    except urllib.error.HTTPError as exc:
+        print("Issue #22 결과 전송 실패: HTTP",exc.code,flush=True)
+        raise
 
 def checkpoint_get():
     try: return int(STATE_FILE.read_text().strip())
@@ -153,7 +157,11 @@ def checkpoint_set(value):
 
 def poll(token):
     last=checkpoint_get()
-    items=comments(token)
+    try:
+        items=comments(token)
+    except urllib.error.HTTPError as exc:
+        print("Issue #22 댓글 조회 실패: HTTP", exc.code, flush=True)
+        raise
     if not isinstance(items,list): raise ValueError("GitHub API result is not a list")
     for entry in sorted(items,key=lambda x:int(x.get("id",0))):
         ident=int(entry.get("id",0))
@@ -187,6 +195,8 @@ def main():
     print("GitHub 인증 확인. Ctrl-C 로 종료. iSH 앱을 전면에 유지하세요.",flush=True)
     while True:
         try: poll(token)
+        except urllib.error.HTTPError as exc:
+            print("GitHub API 오류 HTTP",exc.code,"(토큰 권한·저장소 접근 확인)",flush=True)
         except (urllib.error.URLError,TimeoutError,OSError) as exc:
             print("통신 오류:",type(exc).__name__,"(재시도)",flush=True)
         if "--once" in sys.argv: break
