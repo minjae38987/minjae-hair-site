@@ -1,0 +1,38 @@
+name: Isolated brand six-role Python checks
+on:
+  pull_request:
+    paths:
+      - 'src/chatcut/brand_strategy_v1.py'
+      - 'tests/fixtures/individual_brand_evidence_20261109.json'
+      - 'tests/test_brand_strategy_v1.py'
+      - '.github/workflows/isolated-brand-six-role.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run unchanged mirrored Python tests
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m py_compile src/chatcut/brand_strategy_v1.py
+          python -m unittest discover -s tests -p 'test_brand_strategy_v1.py' -v
+          python -m chatcut.brand_strategy_v1 --input tests/fixtures/individual_brand_evidence_20261109.json --output output/brand.json
+          python - <<'PY'
+          import json
+          o = json.load(open('output/brand.json', encoding='utf-8'))
+          assert len(o['roles']) == 6
+          assert len(o['individual_competitors']) == 5
+          assert o['auto_publish'] is False
+          assert o['quality']['publication_approved'] is False
+          assert o['conversion']['paid_new_customers'] is None
+          print('ISOLATED_BRAND_V1_VALIDATION_PASS')
+          PY
