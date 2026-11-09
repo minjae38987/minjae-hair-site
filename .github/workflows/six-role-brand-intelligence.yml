@@ -1,0 +1,37 @@
+name: Six-role brand intelligence smoke checks
+on:
+  pull_request:
+    paths:
+      - 'scripts/brand_strategy_v1.py'
+      - 'tests/test_brand_strategy_v1.py'
+      - 'marketing/individual_brand_evidence_20261109.json'
+      - '.github/workflows/six-role-brand-intelligence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  brand-intelligence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate evidence-based six roles
+        run: |
+          python3 -m py_compile scripts/brand_strategy_v1.py
+          python3 -m unittest discover -s tests -p 'test_brand_strategy_v1.py' -v
+          python3 scripts/brand_strategy_v1.py --input marketing/individual_brand_evidence_20261109.json --output output/six-role-brand.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('output/six-role-brand.json'))
+          assert len(d['roles'])==6
+          assert len(d['individual_competitors'])==5
+          assert not d['auto_publish']
+          assert d['quality']['publication_approved'] is False
+          assert d['conversion']['paid_new_customers'] is None
+          print('SIX_ROLE_BRAND_DATA_PASS')
+          PY
