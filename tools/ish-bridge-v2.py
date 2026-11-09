@@ -25,6 +25,9 @@ TOKEN_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "github_token"
 STATE_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "last_comment_id"
 PREFIX = "ISH_V2_REQUEST "
 RESULT = "ISH_V2_RESULT "
+SHARED_PREFIX = "MINJAE_JOB_V1 "
+SHARED_RESULT = "MINJAE_RESULT_V1 "
+SHARED_TASKS = frozenset(("HEALTH_CHECK", "LUMI_PUBLIC"))
 ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG", "LUMI_AUTH_MAP", "TASK_PLAN_V1", "CAPABILITIES", "LUMI_LOGIN_FLOW"))
 PLAN_STEPS = frozenset(("ping", "python_env", "git_diag", "lumi_public", "lumi_js_meta", "lumi_auth_map", "lumi_public_js_terms"))
 FIXED_JS_TERMS = frozenset(("login","password","auth","fetch(","localStorage","sessionStorage","Authorization","Bearer ","signInWith","axios","XMLHttpRequest","csrf","cookie"))
@@ -246,6 +249,35 @@ def run_action(action, request=None):
     if action == "LUMI_LOGIN_FLOW": return lumi_login_flow()
     raise ValueError("허용되지 않는 명령")
 
+def run_shared_job(request):
+    """Versioned dual-runner protocol. iSH only accepts explicitly routed safe tasks."""
+    if not isinstance(request, dict) or set(request) != {"request_id", "runner", "task"}:
+        raise ValueError("invalid_job_fields")
+    rid = request["request_id"]
+    if not isinstance(rid, str) or not re.fullmatch(r"[A-Za-z0-9._-]{4,80}", rid):
+        raise ValueError("invalid_request_id")
+    if request["runner"] != "ish" or request["task"] not in SHARED_TASKS:
+        raise ValueError("unsupported_ish_task")
+    if request["task"] == "HEALTH_CHECK":
+        result = {"runtime": "ish", "python": sys.version.split()[0]}
+    elif request["task"] == "LUMI_PUBLIC":
+        state = lumi_public()
+        result = {"http_status": int(state["http_status"])}
+    return {"request_id": rid, "runner": "ish", "task": request["task"],
+            "status": "OK" if request["task"] == "HEALTH_CHECK" or result.get("http_status") == 200 else "ERROR",
+            "data": result}
+
+
+def send_shared(token, payload):
+    """Publish only the schema-validated, non-sensitive response."""
+    allowed_fields = {"request_id", "runner", "task", "status", "data"}
+    if not isinstance(payload, dict) or set(payload) != allowed_fields:
+        raise ValueError("invalid_shared_result")
+    message = SHARED_RESULT + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    api("POST", "/repos/{}/{}/issues/{}/comments".format(OWNER, REPO, ISSUE),
+        token, {"body": message})
+
+
 def comments(token, since_id=0):
     # Fixed issue, paginated to avoid missing new jobs once over 100 comments.
     base = "/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE)
@@ -291,6 +323,26 @@ def poll(token):
         if entry.get("user",{}).get("login","").lower()!=OWNER.lower():
             checkpoint_set(ident);last=ident;continue
         body=entry.get("body","")
+        if body.startswith(SHARED_PREFIX):
+            job=None
+            try:
+                job=json.loads(body[len(SHARED_PREFIX):].strip())
+                # Jobs for Actions are never executed or acknowledged by iSH.
+                if not isinstance(job, dict) or job.get("runner")!="ish":
+                    checkpoint_set(ident);last=ident;continue
+                result=run_shared_job(job)
+                send_shared(token,result)
+                print("공통 작업 완료:", result["request_id"], result["task"], flush=True)
+            except Exception as exc:
+                rid=str(ident)
+                if isinstance(job,dict) and isinstance(job.get("request_id"),str):
+                    if re.fullmatch(r"[A-Za-z0-9._-]{4,80}",job["request_id"]):
+                        rid=job["request_id"]
+                fail={"request_id":rid,"runner":"ish","task":"UNSUPPORTED",
+                      "status":"ERROR","data":{"type":type(exc).__name__}}
+                send_shared(token,fail)
+                print("공통 작업 오류:",ident,type(exc).__name__,flush=True)
+            checkpoint_set(ident);last=ident;continue
         if not body.startswith(PREFIX):
             checkpoint_set(ident);last=ident;continue
         try:
