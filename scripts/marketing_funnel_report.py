@@ -30,7 +30,7 @@ def load_rows(path):
     return rows
 
 def report(rows, target=100):
-    if target < 1:
+    if type(target) is not int or target < 1:
         raise ValueError("target must be positive")
     groups = {}
     for row in rows:
@@ -38,6 +38,7 @@ def report(rows, target=100):
         for key in COUNTS:
             totals[key] += row[key]
     total = {key: sum(group[key] for group in groups.values()) for key in COUNTS}
+    has_data = bool(rows)
     def ratio(numerator, denominator):
         return f"{numerator / denominator * 100:.1f}%" if denominator else "N/A"
     lines = [
@@ -51,11 +52,14 @@ def report(rows, target=100):
     for channel, values in sorted(groups.items()):
         lines.append("| " + channel.replace("|", "/") + " | " +
                      " | ".join(str(values[key]) for key in COUNTS) + " |")
-    lines.append("| **합계** | " + " | ".join(str(total[key]) for key in COUNTS) + " |")
+    if has_data:
+        lines.append("| **합계** | " + " | ".join(str(total[key]) for key in COUNTS) + " |")
+    else:
+        lines.append("| 미측정 | - | - | - | - | - | - |")
     lines.extend([
         "",
-        f"- 목표 대비 유료 신규 방문: **{total['paid_new_customers']}/{target}명**",
-        f"- 달성률(집계된 수 기준): **{ratio(total['paid_new_customers'], target)}**",
+        f"- 목표 대비 유료 신규 방문: **{str(total['paid_new_customers']) + '/' + str(target) + '명' if has_data else '미측정 (입력된 실적 없음)'}**",
+        f"- 달성률(집계된 수 기준): **{ratio(total['paid_new_customers'], target) if has_data else '미측정'}**",
         f"- 콘텐츠 클릭/노출(이벤트 비율): {ratio(total['content_clicks'], total['impressions'])}",
         f"- 예약 클릭/콘텐츠 클릭(이벤트 비율): {ratio(total['booking_clicks'], total['content_clicks'])}",
         f"- 확정 예약/예약 클릭(이벤트 비율): {ratio(total['confirmed_bookings'], total['booking_clicks'])}",
