@@ -210,10 +210,16 @@ def run_action(action, request=None):
     if action == "LUMI_AUTH_MAP": return lumi_auth_map()
     raise ValueError("허용되지 않는 명령")
 
-def comments(token):
-    # The repository and issue IDs are fixed. Do not accept arbitrary URLs.
-    path = "/repos/{}/{}/issues/{}/comments?per_page=100".format(OWNER,REPO,ISSUE)
-    return api("GET",path,token)
+def comments(token, since_id=0):
+    # Fixed issue, paginated to avoid missing new jobs once over 100 comments.
+    base = "/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE)
+    results=[]
+    for page in range(1,16):
+        batch=api("GET",base+"?per_page=100&page="+str(page),token)
+        if not isinstance(batch,list): raise ValueError("invalid_issue_response")
+        results.extend(x for x in batch if int(x.get("id",0))>since_id)
+        if len(batch)<100: return results
+    raise ValueError("issue_comment_page_limit")
 
 def send(token, request_id, status, data):
     payload = {"request_id":request_id,"status":status,"data":data}
@@ -237,7 +243,7 @@ def checkpoint_set(value):
 def poll(token):
     last=checkpoint_get()
     try:
-        items=comments(token)
+        items=comments(token,last)
     except urllib.error.HTTPError as exc:
         print("Issue #22 댓글 조회 실패: HTTP", exc.code, flush=True)
         raise
