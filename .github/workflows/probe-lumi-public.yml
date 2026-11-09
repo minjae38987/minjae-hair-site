@@ -1,0 +1,29 @@
+name: Probe Lumi endpoint (read only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/probe-lumi-public.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe DNS and HTTPS status, no login
+        shell: bash
+        run: |
+          set +e
+          echo "== DNS =="
+          getent ahosts chatbot-service.lumi.ing | head -3
+          echo "DNS_EXIT=${PIPESTATUS[0]}"
+          echo "== HTTPS =="
+          curl -sS -L --max-redirs 3 --connect-timeout 8 --max-time 18 -o /dev/null -w 'HTTP_STATUS=%{http_code}\nFINAL_URL=%{url_effective}\nCONTENT_TYPE=%{content_type}\nTLS_VERIFY=%{ssl_verify_result}\n' https://chatbot-service.lumi.ing/
+          echo "CURL_EXIT=$?"
+          echo "== HEAD =="
+          curl -sSI --max-time 12 https://chatbot-service.lumi.ing/ | sed -n '1,16p'
+          echo "HEAD_EXIT=${PIPESTATUS[0]}"
