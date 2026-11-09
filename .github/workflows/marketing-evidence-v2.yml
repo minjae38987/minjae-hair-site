@@ -1,0 +1,30 @@
+name: Marketing evidence V2 validation
+on:
+  pull_request:
+    paths:
+      - 'scripts/marketing_evidence_v2.py'
+      - 'tests/test_marketing_evidence_v2.py'
+      - 'marketing/funnel-evidence-example.csv'
+      - '.github/workflows/marketing-evidence-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and test
+        run: |
+          python3 -m py_compile scripts/marketing_evidence_v2.py
+          python3 -m unittest discover -s tests -p 'test_marketing_evidence_v2.py' -v
+      - name: Generate verified snapshot
+        run: |
+          python3 scripts/marketing_evidence_v2.py --input marketing/funnel-evidence-example.csv --report output/marketing-v2.md --json output/marketing-v2.json --briefs output/marketing-briefs-v2.json
+          grep -q '미측정' output/marketing-v2.md
