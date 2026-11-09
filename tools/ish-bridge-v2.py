@@ -25,7 +25,9 @@ TOKEN_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "github_token"
 STATE_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "last_comment_id"
 PREFIX = "ISH_V2_REQUEST "
 RESULT = "ISH_V2_RESULT "
-ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG", "LUMI_AUTH_MAP"))
+ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG", "LUMI_AUTH_MAP", "TASK_PLAN_V1", "CAPABILITIES"))
+PLAN_STEPS = frozenset(("ping", "python_env", "git_diag", "lumi_public", "lumi_js_meta", "lumi_auth_map", "lumi_public_js_terms"))
+FIXED_JS_TERMS = frozenset(("login","password","auth","fetch(","localStorage","sessionStorage","Authorization","Bearer ","signInWith","axios","XMLHttpRequest","csrf","cookie"))
 
 def api(method, path, token, payload=None):
     data = json.dumps(payload, ensure_ascii=False).encode() if payload is not None else None
@@ -153,7 +155,53 @@ def git_diag():
             diag[name] = type(e).__name__
     return diag
 
-def run_action(action):
+
+def lumi_public_js_terms(terms):
+    """Count only preapproved literals in published first-party JS; never return snippets."""
+    if not isinstance(terms,list) or not terms or len(terms)>10:
+        raise ValueError("invalid_terms")
+    if any(not isinstance(x,str) or x not in FIXED_JS_TERMS for x in terms):
+        raise ValueError("unapproved_terms")
+    info=lumi_public()
+    paths=info.get("script_paths",[])
+    if not paths or not paths[0].startswith("/assets/") or not paths[0].endswith(".js"):
+        return {"status":"app_script_not_found"}
+    req=urllib.request.Request(HOST+paths[0],headers={"User-Agent":"minjae-ish-readonly-bridge-v2"})
+    with urllib.request.urlopen(req,timeout=30) as res:
+        raw=res.read(5500001)
+    if len(raw)>5500000: return {"status":"file_too_large"}
+    source=raw.decode("utf-8","replace")
+    return {"counts":{term:source.lower().count(term.lower()) for term in terms},"size_bytes":len(raw)}
+
+def task_plan(request):
+    """Allowlisted declarative execution plans, bounded and read-only."""
+    steps=request.get("steps")
+    if not isinstance(steps,list) or not 1<=len(steps)<=5:
+        raise ValueError("plan_steps_required_1_to_5")
+    results=[]
+    for step in steps:
+        if not isinstance(step,dict) or step.get("op") not in PLAN_STEPS:
+            raise ValueError("unsupported_plan_step")
+        op=step["op"]
+        if op=="lumi_public_js_terms":
+            if set(step)!={"op","terms"}: raise ValueError("unsupported_step_parameters")
+            output=lumi_public_js_terms(step["terms"])
+        else:
+            if set(step)!={"op"}: raise ValueError("unsupported_step_parameters")
+            output={
+                "ping":lambda:{"bridge":"online","python":sys.version.split()[0],"github_actions_used":False},
+                "python_env":lambda:{"python":sys.version.split()[0],"platform":sys.platform},
+                "git_diag":git_diag,
+                "lumi_public":lumi_public,
+                "lumi_js_meta":lumi_js_meta,
+                "lumi_auth_map":lumi_auth_map
+            }[op]()
+        results.append({"step":op,"result":output})
+    return {"plan_version":1,"steps":results,"readonly":True}
+
+def run_action(action, request=None):
+    if action == "TASK_PLAN_V1": return task_plan(request or {})
+    if action == "CAPABILITIES": return {"allowed_actions":sorted(ACTIONS),"plan_steps":sorted(PLAN_STEPS),"arbitrary_shell":False,"github_actions_required":False}
     if action == "PING": return {"bridge":"online","python":sys.version.split()[0],"github_actions_used":False}
     if action == "PYTHON_ENV": return {"python":sys.version.split()[0],"platform":sys.platform}
     if action == "GIT_DIAG": return git_diag()
@@ -205,11 +253,12 @@ def poll(token):
             checkpoint_set(ident);last=ident;continue
         try:
             request=json.loads(body[len(PREFIX):].strip())
-            if set(request)!={"request_id","action"}: raise ValueError("요청 형식 오류")
+            expected={"request_id","action","steps"} if request.get("action")=="TASK_PLAN_V1" else {"request_id","action"}
+            if set(request)!=expected: raise ValueError("요청 형식 오류")
             if request["action"] not in ACTIONS: raise ValueError("허용되지 않는 명령")
             if not isinstance(request["request_id"],str) or len(request["request_id"])>80:
                 raise ValueError("request_id 오류")
-            result=run_action(request["action"])
+            result=run_action(request["action"],request)
             send(token,request["request_id"],"OK",result)
             print("완료:",request["request_id"],request["action"],flush=True)
         except Exception as exc:
