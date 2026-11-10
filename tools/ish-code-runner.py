@@ -28,6 +28,7 @@ TASKS = {
                         "tests/dual_runner_router.test.mjs",
                         "tests/dual_runner_coordinator.test.mjs"], 110),
     "NODE_SYNTAX": (["node", "--check", "scripts/dual_runner_coordinator.mjs"], 50),
+    "NODE_CORE_SYNTAX": (["node", "--check", "scripts/dual_runner_coordinator.mjs"], 180),
 }
 # Explicit, immutable file targets. No paths supplied by issue requests.
 NODE_SYNTAX_FILES = (
@@ -214,7 +215,7 @@ def perform(req):
                                          elapsed=time.monotonic()-start)
                     else:
                         try:
-                            run = (check_node_files(path) if task == "NODE_SYNTAX" else
+                            run = (check_node_files(path) if task in ("NODE_SYNTAX", "NODE_CORE_SYNTAX") else
                                    exec_fixed(argv, cwd=path, timeout=timeout, env=clean_env()))
                             status = ("RUNNER_TIMEOUT" if run.get("timeout") else
                                       "DEPENDENCY_MISSING" if run.get("missing") else
