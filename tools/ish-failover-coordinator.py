@@ -6,6 +6,7 @@ No passwords, arbitrary code, URLs, or customer data enter the protocol.
 iSH must remain running; this is not an iPadOS background service.
 """
 import datetime
+import fcntl
 import json
 import os
 import re
@@ -142,6 +143,16 @@ def tick(token, now=None):
     return len(requests)
 
 def main():
+    # One active coordinator per iSH installation. A second launcher must not
+    # dispatch duplicate jobs while the first process is still running.
+    lock_path = Path.home() / ".config" / "minjae-ish-bridge" / "coordinator.lock"
+    lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock = open(lock_path, "a+")
+    try:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("Coordinator already running; duplicate disabled", flush=True)
+        return
     token = bridge.token_get()
     print("Dual runner coordinator active; iSH foreground required", flush=True)
     while True:
