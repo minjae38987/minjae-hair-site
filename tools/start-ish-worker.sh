@@ -20,11 +20,14 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
-for name in ish-bridge-v2.py ish-failover-coordinator.py ish-code-runner.py test-ish-code-runner.py; do
+for name in ish-bridge-v2.py ish-failover-coordinator.py ish-code-runner.py test-ish-code-runner.py test-ish-failover-coordinator.py; do
   curl -fsSL --max-time 35 "$BASE/$name" -o "$STAGE/$name"
 done
-python3 -m py_compile "$STAGE/ish-bridge-v2.py" "$STAGE/ish-failover-coordinator.py" "$STAGE/ish-code-runner.py" "$STAGE/test-ish-code-runner.py"
+python3 -m py_compile "$STAGE/ish-bridge-v2.py" "$STAGE/ish-failover-coordinator.py" "$STAGE/ish-code-runner.py" "$STAGE/test-ish-code-runner.py" "$STAGE/test-ish-failover-coordinator.py"
 python3 "$STAGE/test-ish-code-runner.py"
+# Coordinator imports the installed underscore-named bridge; provide it in staging.
+cp "$STAGE/ish-bridge-v2.py" "$STAGE/ish_bridge_v2.py"
+python3 "$STAGE/test-ish-failover-coordinator.py"
 # Only after syntax and regression checks pass, install the complete release.
 mv "$STAGE/ish-bridge-v2.py" /root/ish_bridge_v2.py
 mv "$STAGE/ish-failover-coordinator.py" /root/ish-failover-coordinator.py
