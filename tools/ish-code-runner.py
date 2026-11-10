@@ -133,6 +133,22 @@ def locally_verified_commit(sha):
     db=open_db()
     try:
         row=db.execute("SELECT verified_at FROM verified_commits WHERE sha=?",(sha,)).fetchone()
+        if not row:
+            # Upgrade compatibility: old V4/V5 PASS records were created only
+            # after online SHA ancestry verification. Reuse that exact SHA,
+            # never infer trust from a failed or unrelated task record.
+            previous=db.execute(
+                "SELECT result_json FROM jobs WHERE sha=? ORDER BY completed_at DESC LIMIT 20",
+                (sha,)).fetchall()
+            for (raw,) in previous:
+                try:
+                    record=json.loads(raw)
+                except (ValueError,TypeError):
+                    continue
+                if (record.get("status")=="OK" and record.get("runner")=="ish"
+                        and record.get("sha")==sha and record.get("task") in TASKS):
+                    row=(1,)
+                    break
     finally:
         db.close()
     if not row:
