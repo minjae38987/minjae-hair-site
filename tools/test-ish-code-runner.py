@@ -161,6 +161,14 @@ class CodeRunnerTests(unittest.TestCase):
         self.assertEqual([c.args[0] for c in sleep.call_args_list],[2,4])
         self.assertTrue(all("fetch" in c and "origin" in c and "main" in c for c in calls))
 
+    def test_fetch_error_classification_has_no_raw_log_in_public_result(self):
+        self.assertEqual(code.fetch_failure_kind("fatal: Could not resolve host: github.com"),
+                         "TRANSIENT_NETWORK")
+        self.assertEqual(code.fetch_failure_kind("remote: Permission to repository denied"),
+                         "AUTH_OR_PERMISSION")
+        self.assertEqual(code.fetch_failure_kind("unexpected internal error"),
+                         "UNKNOWN_GIT_FAILURE")
+
     def test_network_recovery_second_attempt(self):
         with patch.object(code,"exec_fixed",side_effect=[
                 {"code":1,"output":"connection reset"},
