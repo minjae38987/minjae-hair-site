@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""iSH-side bounded coordinator for read-only GitHub Actions -> iSH failover.
+
+Issue #22 is the durable event log. Only owner-authored AUTO requests are valid.
+No passwords, arbitrary code, URLs, or customer data enter the protocol.
+iSH must remain running; this is not an iPadOS background service.
+"""
+import datetime
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+
+# The colocated bridge owns token retrieval, the fixed repository and API client.
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+
+BRIDGE_PATH = Path(__file__).with_name("ish-bridge-v2.py")
+bridge = SourceFileLoader("ish_bridge_v2", str(BRIDGE_PATH)).load_module()
+OWNER = "minjae38987"
+ISSUE_PATH = "/repos/minjae38987/-2/issues/22/comments"
+AUTO = "MINJAE_AUTO_V1 "
+FINAL = "MINJAE_AUTO_RESULT_V1 "
+ACTIONS = "MINJAE_JOB_V1 "
+ACTIONS_RESULT = "MINJAE_RESULT_V1 "
+ISH = "ISH_V2_REQUEST "
+ISH_RESULT = "ISH_V2_RESULT "
+TASKS = {"HEALTH_CHECK": "PING", "LUMI_PUBLIC": "LUMI_PUBLIC"}
+ID = re.compile(r"^[A-Za-z0-9._-]{4,64}$")
+ACTIONS_WAIT = 180
+ISH_WAIT = 240
+MAX_AGE = 1800
+
+def utc_seconds(value):
+    try:
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except (ValueError, AttributeError, TypeError):
+        return 0.0
+
+def read_events(token):
+    # Read the entire event log to reconstruct state after a restart.
+    result = []
+    for page in range(1, 21):
+        batch = bridge.api("GET", ISSUE_PATH + "?per_page=100&page=" + str(page), token)
+        if not isinstance(batch, list):
+            raise ValueError("invalid_issue_comments")
+        result.extend(batch)
+        if len(batch) < 100:
+            return sorted(result, key=lambda e: int(e.get("id", 0)))
+    raise RuntimeError("issue_event_limit")
+
+def event_data(entry, prefix):
+    body = entry.get("body") or ""
+    if not isinstance(body, str) or len(body) > 1500 or not body.startswith(prefix):
+        return None
+    try:
+        obj = json.loads(body[len(prefix):])
+        return obj if isinstance(obj, dict) else None
+    except (ValueError, TypeError):
+        return None
+
+def author(entry):
+    return (entry.get("user") or {}).get("login", "").lower()
+
+def emit(token, prefix, obj):
+    body = prefix + json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+    bridge.api("POST", ISSUE_PATH, token, {"body": body})
+
+def index_events(events):
+    requests = {}
+    actions_jobs = set()
+    ish_jobs = set()
+    actions_results = {}
+    ish_results = {}
+    finals = set()
+    for entry in events:
+        who = author(entry)
+        raw = event_data(entry, AUTO)
+        if raw and who == OWNER and set(raw) == {"request_id", "task"}:
+            rid = raw.get("request_id")
+            if isinstance(rid, str) and ID.fullmatch(rid) and raw.get("task") in TASKS:
+                requests.setdefault(rid, (raw["task"], utc_seconds(entry.get("created_at"))))
+        raw = event_data(entry, ACTIONS)
+        if raw and who == OWNER and raw.get("runner") == "actions":
+            actions_jobs.add(raw.get("request_id"))
+        raw = event_data(entry, ISH)
+        if raw and who == OWNER:
+            ish_jobs.add(raw.get("request_id"))
+        raw = event_data(entry, ACTIONS_RESULT)
+        if raw and who in ("github-actions[bot]", OWNER) and raw.get("runner") == "actions":
+            actions_results[raw.get("request_id")] = raw
+        raw = event_data(entry, ISH_RESULT)
+        if raw and who == OWNER:
+            ish_results[raw.get("request_id")] = raw
+        raw = event_data(entry, FINAL)
+        if raw and who == OWNER and isinstance(raw.get("request_id"), str):
+            finals.add(raw["request_id"])
+    return requests, actions_jobs, ish_jobs, actions_results, ish_results, finals
+
+def result(token, rid, task, status, runner, reason):
+    emit(token, FINAL, {"request_id": rid, "task": task, "status": status,
+                        "runner": runner, "reason": reason})
+
+def tick(token, now=None):
+    now = time.time() if now is None else now
+    requests, aj, ij, ar, ir, finals = index_events(read_events(token))
+    for rid, (task, created) in requests.items():
+        if rid in finals:
+            continue
+        aid = rid + "-actions"
+        iid = rid + "-ish"
+        if now - created > MAX_AGE:
+            result(token, rid, task, "TIMED_OUT", "none", "REQUEST_EXPIRED")
+            continue
+        if aid not in aj:
+            emit(token, ACTIONS, {"request_id": aid, "runner": "actions", "task": task})
+            print("Dispatched Actions:", rid, flush=True)
+            continue
+        a = ar.get(aid)
+        if a and a.get("task") == task and a.get("status") == "OK":
+            result(token, rid, task, "OK", "actions", "ACTIONS_CONFIRMED")
+            continue
+        # Only idempotent, read-only tasks are eligible. Absence of a result
+        # is not proof of quota exhaustion. A late Actions run is harmless.
+        if now - created < ACTIONS_WAIT and not (a and a.get("status") != "OK"):
+            continue
+        if iid not in ij:
+            emit(token, ISH, {"request_id": iid, "action": TASKS[task]})
+            print("Failover to iSH:", rid, flush=True)
+            continue
+        i = ir.get(iid)
+        if i and i.get("status") == "OK":
+            data = i.get("data") or {}
+            if (task == "HEALTH_CHECK" and data.get("bridge") == "online") or (
+                    task == "LUMI_PUBLIC" and data.get("http_status") == 200):
+                result(token, rid, task, "OK", "ish", "ACTIONS_UNCONFIRMED_OR_FAILED")
+                continue
+        if now - created >= ACTIONS_WAIT + ISH_WAIT:
+            result(token, rid, task, "TIMED_OUT", "ish", "NO_CONFIRMED_SUCCESS")
+    return len(requests)
+
+def main():
+    token = bridge.token_get()
+    print("Dual runner coordinator active; iSH foreground required", flush=True)
+    while True:
+        try:
+            tick(token)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError,
+                ValueError, RuntimeError) as exc:
+            print("Coordinator retry:", type(exc).__name__, flush=True)
+        if "--once" in sys.argv:
+            break
+        time.sleep(20)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
