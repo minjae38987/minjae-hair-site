@@ -71,6 +71,46 @@ class CodeRunnerTests(unittest.TestCase):
         self.assertEqual(result["code"],0)
         self.assertEqual(len(calls),len(code.NODE_SYNTAX_FILES))
 
+    def test_only_previously_verified_exact_sha_is_eligible_for_offline_reuse(self):
+        with TemporaryDirectory() as folder:
+            with patch.object(code,"STATE",Path(folder)/"jobs.sqlite3"),patch.object(
+                    code,"REPO",Path(folder)):
+                # No known-good record: fail closed without trusting local SHA.
+                self.assertFalse(code.locally_verified_commit(SHA))
+                code.mark_verified_commit(SHA)
+                with patch.object(code,"exec_fixed",return_value={"code":0,"output":""}) as check:
+                    self.assertTrue(code.locally_verified_commit(SHA))
+                    self.assertFalse(code.locally_verified_commit(SHA2))
+                    self.assertEqual(check.call_count,1)
+
+    def test_offline_reuse_requires_existing_git_object(self):
+        with TemporaryDirectory() as folder:
+            with patch.object(code,"STATE",Path(folder)/"jobs.sqlite3"),patch.object(
+                    code,"REPO",Path(folder)):
+                code.mark_verified_commit(SHA)
+                with patch.object(code,"exec_fixed",return_value={"code":1,"output":""}):
+                    self.assertFalse(code.locally_verified_commit(SHA))
+
+    def test_validated_cache_used_only_after_fetch_failure(self):
+        with TemporaryDirectory() as folder:
+            base=Path(folder)
+            (base/".git").mkdir()
+            original="https://github.com/minjae38987/-2.git"
+            counter=[0]
+            def fake(argv,**kwargs):
+                counter[0]+=1
+                if argv[-3:] == ["remote","get-url","origin"]:
+                    return {"code":0,"output":original}
+                if "fetch" in argv:
+                    return {"code":1,"output":""}
+                return {"code":0,"output":""}
+            with patch.object(code,"STATE",base/"verified.sqlite3"),patch.object(
+                    code,"REPO",base),patch.object(code,"exec_fixed",side_effect=fake):
+                self.assertEqual(code.verify_repo(SHA),"GIT_NETWORK")
+                code.mark_verified_commit(SHA)
+                self.assertEqual(code.verify_repo(SHA),"OK_CACHED")
+                self.assertEqual(code.verify_repo(SHA2),"GIT_NETWORK")
+
     def test_transient_network_retry_is_bounded(self):
         with TemporaryDirectory() as folder:
             with patch.object(code,"STATE",Path(folder)/"jobs.sqlite3"),patch.object(
