@@ -62,13 +62,35 @@ def clean_env():
                 "PIP_NO_INDEX": "1", "NPM_CONFIG_OFFLINE": "true"})
     return env
 
-def result(rid, sha, task, status, reason, code=None, elapsed=0, cached=False):
+def error_metadata(raw):
+    """Return stable, low-information diagnostics; never expose raw log lines."""
+    data = raw.get("output","") if isinstance(raw,dict) else ""
+    patterns = (
+        ("MODULE_MISSING", ("modulenotfounderror", "cannot find module", "err_module_not_found")),
+        ("SYNTAX_ERROR", ("syntaxerror", "indentationerror", "invalid syntax")),
+        ("ASSERTION_FAILED", ("assertionerror", "not ok", "failed assertion")),
+        ("DEPENDENCY_ERROR", ("no module named", "command not found")),
+    )
+    lower = data.lower()
+    category = next((name for name, words in patterns if any(w in lower for w in words)), "TEST_FAILURE")
+    # No raw stdout, paths, user inputs, environment variables or tokens.
+    # Categorization and bounded counters are enough to choose a repair path.
+    passed = re.search(r"(?m)^# pass (\\d+)\\s*$",data)
+    failed = re.search(r"(?m)^# fail (\\d+)\\s*$",data)
+    return {"error_category":category,
+            "diagnostic_fingerprint":hashlib.sha256(
+                (category+"|"+str(raw.get("code"))).encode()).hexdigest()[:12],
+            "tests_passed":int(passed.group(1)) if passed else None,
+            "tests_failed":int(failed.group(1)) if failed else None}
+
+def result(rid, sha, task, status, reason, code=None, elapsed=0, cached=False, metadata=None):
     return {"request_id": rid, "sha": sha, "task": task,
             "status": status, "reason": reason,
             "exit_code": code if isinstance(code, int) else None,
             "duration_ms": max(0, int(elapsed * 1000)),
             "cached": bool(cached), "runner": "ish",
-            "logs_exported": False, "video_executed": False}
+            "logs_exported": False, "video_executed": False,
+            "diagnostics": metadata or {}}
 
 def open_db():
     STATE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -153,7 +175,8 @@ def perform(req):
                                       "OK" if run["code"] == 0 else "TEST_FAILED")
                             outcome = result(rid, sha, task, status,
                                              "PASS" if status == "OK" else status,
-                                             code=run["code"], elapsed=time.monotonic()-start)
+                                             code=run["code"], elapsed=time.monotonic()-start,
+                                             metadata=error_metadata(run) if status!="OK" else {})
                         finally:
                             exec_fixed(["git", "-C", str(REPO), "worktree", "remove",
                                         "--force", str(path)], timeout=30, env=clean_env())
