@@ -33,6 +33,8 @@ V3_RESULT = "ISH_V3_RESULT "
 CODE_PREFIX = "ISH_CODE_REQUEST_V1 "
 WRITE_PREFIX = "ISH_WRITE_REQUEST_V1 "
 WRITE_RESULT = "ISH_WRITE_RESULT_V1 "
+PATCH_PREFIX = "ISH_PATCH_REQUEST_V1 "
+PATCH_RESULT = "ISH_PATCH_RESULT_V1 "
 CODE_RESULT = "ISH_CODE_RESULT_V1 "
 DUAL_PREFIX = "HAIR_JOB_V1 "
 DUAL_RESULT = "HAIR_JOB_RESULT_V1 "
@@ -416,6 +418,47 @@ def poll(token):
                 send_shared(token,fail)
                 print("공통 작업 오류:",ident,type(exc).__name__,flush=True)
             checkpoint_set(ident);last=ident;continue
+        if body.startswith(PATCH_PREFIX):
+            # Owner-approved exact replacement only. Never execute edited code.
+            try:
+                if len(body)>6500: raise ValueError("patch_request_too_long")
+                job=json.loads(body[len(PATCH_PREFIX):].strip())
+                patcher=SourceFileLoader("ish_source_patch",
+                    str(Path(__file__).with_name("ish-source-patch.py"))).load_module()
+                patcher.validate(job)
+                rid=job["request_id"]
+            except (ValueError,TypeError,KeyError,ImportError,OSError):
+                print("Invalid patch request ignored:",ident,flush=True)
+                checkpoint_set(ident);last=ident;continue
+            try:
+                report=patcher.run(api,token,job)
+            except patcher.PermissionDenied as exc:
+                report={"request_id":rid,"action":patcher.ACTION,
+                        "status":"ERROR","reason":"GITHUB_HTTP_403_AT_"+exc.phase}
+            except urllib.error.HTTPError as exc:
+                report={"request_id":rid,"action":patcher.ACTION,
+                        "status":"ERROR","reason":"GITHUB_HTTP_"+str(exc.code)}
+            except Exception as exc:
+                report={"request_id":rid,"action":patcher.ACTION,
+                        "status":"ERROR","reason":"PATCH_RUNTIME_"+type(exc).__name__[:40]}
+            # A replay with the same request ID can be acknowledged only if
+            # the body was exactly the same; the branch content is still
+            # independently checked by the patcher.
+            found=False
+            for comment in comments(token,ident):
+                if comment.get("user",{}).get("login","").lower()!=OWNER.lower():continue
+                raw=comment.get("body","")
+                if not isinstance(raw,str) or not raw.startswith(PATCH_RESULT):continue
+                try: prior=json.loads(raw[len(PATCH_RESULT):])
+                except (ValueError,TypeError):continue
+                if isinstance(prior,dict) and prior.get("request_id")==rid:
+                    found=True;break
+            if not found:
+                api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),
+                    token,{"body":PATCH_RESULT+json.dumps(report,separators=(",",":"))})
+            checkpoint_set(ident);last=ident
+            print("Restricted patch:",rid,report["status"],report["reason"],flush=True)
+            continue
         if body.startswith(WRITE_PREFIX):
             # Only the repository owner's validated fixed proof request can
             # create a dedicated, non-main branch. No shell or caller text.
