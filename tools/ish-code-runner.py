@@ -141,7 +141,7 @@ def node_test_supported():
     check=exec_fixed(["node","--version"],timeout=10,env=clean_env())
     if check["code"]!=0:
         return False
-    found=re.fullmatch(r"v(\\d+)\\.(\\d+)\\.(\\d+)",check["output"].strip())
+    found=re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)",check["output"].strip())
     if not found:
         return False
     major,minor=int(found.group(1)),int(found.group(2))
