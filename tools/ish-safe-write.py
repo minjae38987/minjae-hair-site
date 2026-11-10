@@ -15,6 +15,12 @@ ID=re.compile(r"^[a-zA-Z0-9_-]{4,32}$")
 SHA=re.compile(r"^[a-f0-9]{40}$")
 ALLOWED_ACTION="PROOF_COMMIT"
 
+class WriteAccessDenied(Exception):
+    def __init__(self, phase):
+        super().__init__("GITHUB_HTTP_403_AT_"+phase)
+        self.phase=phase
+
+
 def validate(req):
     if not isinstance(req,dict) or set(req)!={"request_id","base_sha","action"}:
         raise ValueError("INVALID_SCHEMA")
@@ -35,6 +41,23 @@ def payload(rid, sha):
 
 def execute(api,token,req):
     rid,sha=validate(req)
+    phase="INIT"
+    def request(method,path,payload=None):
+        nonlocal phase
+        if path.endswith("/git/ref/heads/main"):
+            phase="READ_MAIN_REF"
+        elif "/git/ref/heads/ish-proof-" in path:
+            phase="READ_PROOF_REF"
+        elif path.endswith("/git/refs") and method=="POST":
+            phase="CREATE_PROOF_REF"
+        elif "/contents/" in path:
+            phase=("WRITE_PROOF_CONTENT" if method=="PUT" else "READ_PROOF_CONTENT")
+        try:
+            return api(method,path,token,payload) if payload is not None else api(method,path,token)
+        except urllib.error.HTTPError as e:
+            if e.code==403:
+                raise WriteAccessDenied(phase) from None
+            raise
     branch="ish-proof-"+rid
     target="automation/ish-write-proofs/"+rid+".json"
     data=payload(rid,sha)
@@ -47,25 +70,25 @@ def execute(api,token,req):
     # branch whose head no longer matches its expected starting point.
     existing=None
     try:
-        existing=api("GET",REPO+"/git/ref/heads/"+branch,token)
+        existing=request("GET",REPO+"/git/ref/heads/"+branch)
     except urllib.error.HTTPError as e:
         if e.code!=404: raise
     if existing is None:
-        head=api("GET",REPO+"/git/ref/heads/main",token)
+        head=request("GET",REPO+"/git/ref/heads/main")
         if not isinstance(head,dict) or (head.get("object") or {}).get("sha")!=sha:
             return fail("BASE_SHA_MISMATCH")
         try:
-            api("POST",REPO+"/git/refs",token,{"ref":"refs/heads/"+branch,"sha":sha})
+            request("POST",REPO+"/git/refs",{"ref":"refs/heads/"+branch,"sha":sha})
         except urllib.error.HTTPError as e:
             if e.code!=422: raise
             # Race with another request. Refetch; never assume ownership.
-        existing=api("GET",REPO+"/git/ref/heads/"+branch,token)
+        existing=request("GET",REPO+"/git/ref/heads/"+branch)
     if not isinstance(existing,dict) or not SHA.fullmatch((existing.get("object") or {}).get("sha","")):
         return fail("BRANCH_UNVERIFIED")
     path=REPO+"/contents/"+target+"?ref="+branch
     previous=None
     try:
-        previous=api("GET",path,token)
+        previous=request("GET",path)
     except urllib.error.HTTPError as e:
         if e.code!=404: raise
     if previous is not None:
@@ -81,11 +104,11 @@ def execute(api,token,req):
     if existing["object"]["sha"]!=sha:
         return fail("BRANCH_MOVED_BEFORE_WRITE")
     # A pre-created but empty branch is also bound to the pinned main HEAD.
-    head=api("GET",REPO+"/git/ref/heads/main",token)
+    head=request("GET",REPO+"/git/ref/heads/main")
     if not isinstance(head,dict) or (head.get("object") or {}).get("sha")!=sha:
         return fail("BASE_SHA_MISMATCH")
     try:
-        api("PUT",REPO+"/contents/"+target,token,{
+        request("PUT",REPO+"/contents/"+target,{
             "message":"chore: iSH fixed proof "+rid,
             "content":base64.b64encode(data).decode("ascii"),
             "branch":branch})
@@ -93,7 +116,7 @@ def execute(api,token,req):
         # A timed-out or conflicted write is not reported as success.
         return fail("WRITE_FAILED_HTTP_"+str(e.code))
     # Verify content by direct read, not by assuming PUT success.
-    committed=api("GET",path,token)
+    committed=request("GET",path)
     try:
         stored=base64.b64decode(committed["content"])
     except (ValueError,TypeError,KeyError):
