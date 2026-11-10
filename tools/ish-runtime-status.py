@@ -58,17 +58,17 @@ def snapshot(loaded_bridge_digest, now=None):
     installed={name:path.is_file() for name,path in MODULES.items()}
     release=small_json(RELEASE)
     valid_release=bool(release and isinstance(release.get("sha"),str) and SHA.fullmatch(release["sha"]))
-    expected=(release.get("digests") or {}) if valid_release else {}
-    verified={name:(installed[name] and bool(DIGEST.fullmatch(expected.get(name,""))) and
+    expected=release.get("digests") if valid_release and isinstance(release.get("digests"),dict) else {}
+    verified={name:(installed[name] and isinstance(expected.get(name),str) and bool(DIGEST.fullmatch(expected[name])) and
                     digest(path)==expected[name])
               for name,path in MODULES.items()}
-    bridge_loaded=bool(DIGEST.fullmatch(loaded_bridge_digest or ""))
+    bridge_loaded=isinstance(loaded_bridge_digest,str) and bool(DIGEST.fullmatch(loaded_bridge_digest))
     bridge_matches=bool(bridge_loaded and verified["bridge"] and loaded_bridge_digest == expected["bridge"])
     beat=small_json(HEARTBEAT) or {}
     beat_age=now-beat.get("timestamp",0) if isinstance(beat.get("timestamp"),(int,float)) else float("inf")
     recent=0<=beat_age<=90
     running=bool(recent and live_pid(beat.get("pid")) and
-                 bool(DIGEST.fullmatch(beat.get("coordinator_digest",""))) and
+                 isinstance(beat.get("coordinator_digest"),str) and bool(DIGEST.fullmatch(beat["coordinator_digest"])) and
                  verified["coordinator"] and beat["coordinator_digest"] == expected["coordinator"])
     return {
         "protocol": "ISH_RUNTIME_STATUS_V1",
