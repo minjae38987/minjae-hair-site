@@ -22,7 +22,7 @@ class CodeRunnerTests(unittest.TestCase):
             code.validate(dict(job(),command="rm -rf /"))
         with self.assertRaisesRegex(ValueError,"INVALID_SHA"):
             code.validate(job(sha="main"))
-        self.assertEqual(set(code.TASKS),{"PYTHON_SYNTAX","NODE_DUAL_TEST","NODE_SYNTAX"})
+        self.assertEqual(set(code.TASKS),{"PYTHON_SYNTAX","NODE_DUAL_TEST","NODE_SYNTAX","NODE_CORE_SYNTAX"})
 
     def test_one_id_is_only_executed_once(self):
         with TemporaryDirectory() as folder:
