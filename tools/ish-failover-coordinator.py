@@ -43,7 +43,7 @@ CODE_TASKS = frozenset(("PYTHON_SYNTAX", "NODE_DUAL_TEST"))
 SHA = re.compile(r"^[a-f0-9]{40}$")
 CODE_ID = re.compile(r"^[A-Za-z0-9._-]{4,50}$")
 CODE_ACTIONS_WAIT = 180
-CODE_ISH_WAIT = 240
+CODE_ISH_WAIT = 420
 
 
 def utc_seconds(value):
@@ -207,7 +207,8 @@ def code_tick(token, events, now):
             continue
         i=ir.get(iid)
         if valid(i,"ish") and i.get("status") in (
-            "OK","TEST_FAILED","DEPENDENCY_MISSING","SHA_NOT_APPROVED","GIT_UNAVAILABLE"):
+            "OK","TEST_FAILED","DEPENDENCY_MISSING","SHA_NOT_APPROVED",
+            "GIT_UNAVAILABLE","EXECUTION_ERROR","RUNNER_TIMEOUT"):
             done(i["status"],"ish",i.get("reason","ISH_COMPLETED"))
             continue
         if now-created>CODE_ACTIONS_WAIT+CODE_ISH_WAIT:
