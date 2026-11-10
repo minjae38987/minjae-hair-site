@@ -1,0 +1,91 @@
+name: Probe Lumi endpoint (read only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/probe-lumi-public.yml'
+      - 'tests/lumi-public-login-render.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe DNS and HTTPS status, no login
+        shell: bash
+        run: |
+          set +e
+          echo "== DNS =="
+          getent ahosts chatbot-service.lumi.ing | head -3
+          echo "DNS_EXIT=${PIPESTATUS[0]}"
+          echo "== HTTPS =="
+          curl -sS -L --max-redirs 3 --connect-timeout 8 --max-time 18 -o /dev/null -w 'HTTP_STATUS=%{http_code}\nFINAL_URL=%{url_effective}\nCONTENT_TYPE=%{content_type}\nTLS_VERIFY=%{ssl_verify_result}\n' https://chatbot-service.lumi.ing/
+          echo "CURL_EXIT=$?"
+          echo "== HEAD =="
+          curl -sSI --max-time 12 https://chatbot-service.lumi.ing/ | sed -n '1,16p'
+          echo "HEAD_EXIT=${PIPESTATUS[0]}"
+      - name: Inspect publicly served login page HTML structure
+        shell: bash
+        run: |
+          set -e
+          curl -fsSL --max-time 18 --max-filesize 1000000 https://chatbot-service.lumi.ing/ -o /tmp/lumi_public.html
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Audit(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.in_title=False
+                  self.title=[]
+                  self.forms=[]
+                  self.inputs=[]
+                  self.scripts=[]
+                  self.metas=[]
+                  self.buttons=[]
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='title':self.in_title=True
+                  if tag=='form':self.forms.append({'method':a.get('method','GET'),'action_present':bool(a.get('action'))})
+                  if tag=='input':self.inputs.append({'type':a.get('type','text'),'name_present':bool(a.get('name'))})
+                  if tag=='script':self.scripts.append({'type':a.get('type',''), 'external':bool(a.get('src'))})
+                  if tag=='meta' and a.get('name','').lower() in ('generator','description'):self.metas.append(a.get('name'))
+                  if tag=='button':self.buttons.append(a.get('type',''))
+              def handle_endtag(self,tag):
+                  if tag=='title':self.in_title=False
+              def handle_data(self,data):
+                  if self.in_title:self.title.append(data.strip())
+          p=Audit()
+          raw=Path('/tmp/lumi_public.html').read_text(encoding='utf-8',errors='replace')
+          p.feed(raw)
+          print('PUBLIC_HTML_BYTES',len(raw))
+          print('PUBLIC_TITLE',' '.join(p.title)[:100])
+          print('PUBLIC_FORMS',p.forms[:10])
+          print('PUBLIC_INPUT_TYPES',p.inputs[:20])
+          print('PUBLIC_SCRIPT_COUNT',len(p.scripts))
+          print('PUBLIC_EXTERNAL_SCRIPT_COUNT',sum(x['external'] for x in p.scripts))
+          print('PUBLIC_BUTTON_COUNT',len(p.buttons))
+          print('PUBLIC_ROOT_APP_MARKERS',{name:(name in raw) for name in ['id="root"','id="app"','__NEXT_DATA__','/_next/','/assets/']})
+          PY
+      - name: Set up Node for browser-only public rendering
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser dependencies
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Render publicly accessible Lumi login UI
+        run: node tests/lumi-public-login-render.mjs
+      - name: Retain public screenshot and metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumi-public-login-audit
+          path: lumi-public-render/
+          retention-days: 7
+          if-no-files-found: warn
