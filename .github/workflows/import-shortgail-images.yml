@@ -1,0 +1,39 @@
+name: Import shortgail public blog images
+on:
+  push:
+    paths:
+      - .github/workflows/import-shortgail-images.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch five approved photos from document previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/shortgail
+          curl -fL --retry 2 --connect-timeout 12 --max-time 120 'https://docs.google.com/docs-images-rt/AIpPl2A5ACLh2xkF8malZ87JzhZ2TxhhX30IeD5l0DxJLbD-MHo3uHaNrcGf-ZUp8g1j6RO5lNp7ajzh9Jlpzk-sJmS3s4MsuQ4NLfj1Yn2lc4LeLq9G_Lyxw4YTiqvTqxr7VFPM_2FgXnqgBRH26e8mgcZ2DSXR5CpXyo_3FwiPxZqztTTF=s2048?key=RJ3iG86PfizcyvJxAhtjjA' -o 'assets/shortgail/before-side.jpg'
+          test "$(wc -c < 'assets/shortgail/before-side.jpg')" -gt 10000
+          file 'assets/shortgail/before-side.jpg' | grep -E 'JPEG|PNG'
+          curl -fL --retry 2 --connect-timeout 12 --max-time 120 'https://docs.google.com/docs-images-rt/AIpPl2DO1ZTEvY-zSDE24nlS3dpVEUiuFqrh1ci5JW-Ztak81ExsV-ZR1yXKOqDOj_1iv3_U9Bin0bS65SI52WbpKYxQzCy77ATBKJWw2lQXbJ1_UUj2FqdM9iUSmNJNtYPNRfwH38eSNwgyMxb1eg4XX5nUi4oxACEoECcxMitx2ubxdGal2zs=s2048?key=RJ3iG86PfizcyvJxAhtjjA' -o 'assets/shortgail/before-back.jpg'
+          test "$(wc -c < 'assets/shortgail/before-back.jpg')" -gt 10000
+          file 'assets/shortgail/before-back.jpg' | grep -E 'JPEG|PNG'
+          curl -fL --retry 2 --connect-timeout 12 --max-time 120 'https://docs.google.com/docs-images-rt/AIpPl2A4FHX5exZ5HPHoE5v_frcAHqOCf3A0IFmc0Sjakmsr0n9DuubTuoS9z4nZ0UwmGmfjBVt0gR2BkKHAIGariru4E0G6izzkTO84pd6vADJWd7mQdwHl3KW4xo1J_cvRs1hZ0acVwVZsCFa5ADbGzVSp2Z4dUvKy2k4t0HDfu97XDeahP0g=s2048?key=RJ3iG86PfizcyvJxAhtjjA' -o 'assets/shortgail/after-side.jpg'
+          test "$(wc -c < 'assets/shortgail/after-side.jpg')" -gt 10000
+          file 'assets/shortgail/after-side.jpg' | grep -E 'JPEG|PNG'
+          curl -fL --retry 2 --connect-timeout 12 --max-time 120 'https://docs.google.com/docs-images-rt/AIpPl2DlexAK8aRikn6nils5zjIb_5167XgAKslLoDWiqXFizX6bO755B0fSygOFS-e1QX6Gsif77aFqBvKWStKAjmQLOvYv6v2VXczQkK1IgIM9qcPH1pVVQYWUhYyd3k1Hu73h43BJGIyA63fpx0qDkug6Gzj5lk-HlHVLRrNz6N--mtYVwf4=s2048?key=RJ3iG86PfizcyvJxAhtjjA' -o 'assets/shortgail/after-back.jpg'
+          test "$(wc -c < 'assets/shortgail/after-back.jpg')" -gt 10000
+          file 'assets/shortgail/after-back.jpg' | grep -E 'JPEG|PNG'
+          curl -fL --retry 2 --connect-timeout 12 --max-time 120 'https://docs.google.com/docs-images-rt/AIpPl2A0QMATl0aAhZO4oGQlXd6eKCCkxPojAzDIcN9EehFAA6MRnGYjHRC73GSPldq5oZgNmqkz5wjP7oNOy6yeNjx1bX6xS-RE7sktPsmoFV6fSCoYm-DQuqDzgrPdp9E2TShUXrOq61Aj3yffY_eVaPcUxL7jiwkPHPIyFpgllyQ5BL62hcY=s2048?key=RJ3iG86PfizcyvJxAhtjjA' -o 'assets/shortgail/after-front.jpg'
+          test "$(wc -c < 'assets/shortgail/after-front.jpg')" -gt 10000
+          file 'assets/shortgail/after-front.jpg' | grep -E 'JPEG|PNG'
+      - name: Commit blog images
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/shortgail
+          git diff --cached --quiet || (git commit -m "Add five shortgail blog photos" && git push)
