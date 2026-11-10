@@ -68,9 +68,11 @@ def api(method, path, token, payload=None):
         return json.loads(raw.decode("utf-8")) if raw else {}
 
 def token_get():
-    token = os.getenv("GH_TOKEN", "").strip() or os.getenv("GITHUB_TOKEN", "").strip()
-    if not token and TOKEN_FILE.exists():
-        token = TOKEN_FILE.read_text().strip()
+    # A deliberately rotated on-device token must take precedence over
+    # stale inherited GH_TOKEN/GITHUB_TOKEN from old terminal sessions.
+    token = TOKEN_FILE.read_text().strip() if TOKEN_FILE.exists() else ""
+    if not token:
+        token = os.getenv("GH_TOKEN", "").strip() or os.getenv("GITHUB_TOKEN", "").strip()
     if not token:
         print("GitHub 토큰이 필요합니다. 입력 내용은 화면에 표시되지 않습니다.", flush=True)
         token = getpass.getpass("GitHub 토큰: ").strip()

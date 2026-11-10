@@ -18,6 +18,8 @@ on:
       - 'tools/ish-bridge-v2.py'
       - 'tools/ish-safe-write.py'
       - 'tools/test-ish-safe-write.py'
+      - 'tools/ish-auth-repair.py'
+      - 'tools/test-ish-auth-repair.py'
       - '.github/workflows/ish-failover-regression.yml'
   workflow_dispatch:
 
@@ -40,7 +42,7 @@ jobs:
       - name: Prepare same bridge import alias as iSH launcher
         run: cp tools/ish-bridge-v2.py tools/ish_bridge_v2.py
       - name: Verify Python syntax
-        run: python3 -m py_compile tools/ish-bridge-v2.py tools/ish-failover-coordinator.py tools/ish-code-runner.py tools/test-ish-code-runner.py tools/test-ish-failover-coordinator.py tools/actions-failure-diagnostic.py tools/test-actions-failure-diagnostic.py tools/actions-run-probe.py tools/test-actions-run-probe.py tools/ish-runtime-status.py tools/test-ish-runtime-status.py tools/ish-safe-write.py tools/test-ish-safe-write.py
+        run: python3 -m py_compile tools/ish-bridge-v2.py tools/ish-failover-coordinator.py tools/ish-code-runner.py tools/test-ish-code-runner.py tools/test-ish-failover-coordinator.py tools/actions-failure-diagnostic.py tools/test-actions-failure-diagnostic.py tools/actions-run-probe.py tools/test-actions-run-probe.py tools/ish-runtime-status.py tools/test-ish-runtime-status.py tools/ish-safe-write.py tools/test-ish-safe-write.py tools/ish-auth-repair.py tools/test-ish-auth-repair.py
       - name: Run offline failover regression
         run: python3 tools/test-ish-failover-coordinator.py
       - name: Run offline code-runner regression
@@ -53,5 +55,7 @@ jobs:
         run: python3 tools/test-ish-runtime-status.py
       - name: Run restricted write proof regression
         run: python3 tools/test-ish-safe-write.py
+      - name: Run token repair regression
+        run: python3 tools/test-ish-auth-repair.py
       - name: Verify iSH launcher shell syntax
         run: sh -n tools/start-ish-worker.sh

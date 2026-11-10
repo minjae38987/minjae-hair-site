@@ -24,6 +24,7 @@ MODULES = {
     "failure_diagnostic": ROOT / "actions-failure-diagnostic.py",
     "run_probe": ROOT / "actions-run-probe.py",
     "safe_write": ROOT / "ish-safe-write.py",
+    "auth_repair": ROOT / "ish-auth-repair.py",
 }
 
 def digest(path):
