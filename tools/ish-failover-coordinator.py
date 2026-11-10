@@ -179,7 +179,8 @@ def code_tick(token, events, now):
                     isinstance(sha,str) and SHA.fullmatch(sha)) and task in CODE_TASKS:
                 jobs.setdefault(rid,(sha,task,utc_seconds(e.get("created_at"))))
         raw = event_data(e, CODE_ACTIONS)
-        if raw and who == OWNER:\n            actions_sent.setdefault(raw.get("request_id"), utc_seconds(e.get("created_at")))
+        if raw and who == OWNER:
+            actions_sent.setdefault(raw.get("request_id"), utc_seconds(e.get("created_at")))
         raw = event_data(e, CODE_ISH)
         if raw and who == OWNER:
             ish_sent[raw.get("request_id")] = utc_seconds(e.get("created_at"))
