@@ -428,6 +428,9 @@ def poll(token):
                 checkpoint_set(ident);last=ident;continue
             try:
                 report=writer.execute(api,token,request)
+            except writer.WriteAccessDenied as exc:
+                report={"request_id":rid,"action":"PROOF_COMMIT","status":"ERROR",
+                        "reason":"GITHUB_HTTP_403_AT_"+exc.phase}
             except urllib.error.HTTPError as exc:
                 report={"request_id":rid,"action":"PROOF_COMMIT","status":"ERROR",
                         "reason":"GITHUB_HTTP_"+str(exc.code)}
