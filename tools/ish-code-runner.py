@@ -165,6 +165,10 @@ def verify_repo(sha):
                "git@github.com:minjae38987/-2.git")
     if remote["code"] != 0 or remote["output"].strip() not in allowed:
         return "GIT_UNAVAILABLE"
+    # Identical commits verified against origin/main online may be reused.
+    # This avoids repeating flaky Git fetches on every bounded code check.
+    if locally_verified_commit(sha):
+        return "OK_CACHED"
     # Fetch trusted branch, then require requested commit to be its ancestor.
     fetch = exec_fixed(["git", "-C", str(REPO), "fetch", "--no-tags",
                         "--depth=1000", "origin", "main"], timeout=50, env=clean_env())
