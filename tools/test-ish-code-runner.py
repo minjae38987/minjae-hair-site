@@ -150,14 +150,57 @@ class CodeRunnerTests(unittest.TestCase):
                 self.assertEqual(code.verify_repo(SHA2),"GIT_NETWORK")
 
     def test_transient_network_retry_is_bounded(self):
+        calls=[]
+        def fake(argv, **kwargs):
+            calls.append(list(argv))
+            return {"code":1,"output":"Could not resolve host"}
+        with patch.object(code,"exec_fixed",side_effect=fake),patch.object(code.time,"sleep") as sleep:
+            self.assertEqual(code.fetch_main_with_retry(),"GIT_NETWORK")
+        self.assertEqual(len(calls),3)
+        self.assertEqual(sleep.call_count,2)
+        self.assertEqual([c.args[0] for c in sleep.call_args_list],[2,4])
+        self.assertTrue(all("fetch" in c and "origin" in c and "main" in c for c in calls))
+
+    def test_network_recovery_second_attempt(self):
+        with patch.object(code,"exec_fixed",side_effect=[
+                {"code":1,"output":"connection reset"},
+                {"code":0,"output":""}]) as run,patch.object(code.time,"sleep") as sleep:
+            self.assertEqual(code.fetch_main_with_retry(),"OK")
+        self.assertEqual(run.call_count,2)
+        self.assertEqual(sleep.call_count,1)
+
+    def test_auth_failure_does_not_retry(self):
+        with patch.object(code,"exec_fixed",return_value={
+                "code":128,"output":"fatal: Authentication failed"}) as run,patch.object(
+                code.time,"sleep") as sleep:
+            self.assertEqual(code.fetch_main_with_retry(),"GIT_AUTH")
+        self.assertEqual(run.call_count,1)
+        sleep.assert_not_called()
+
+    def test_missing_git_does_not_retry(self):
+        with patch.object(code,"exec_fixed",return_value={"code":127,"output":"","missing":True}) as run:
+            self.assertEqual(code.fetch_main_with_retry(),"GIT_MISSING")
+        self.assertEqual(run.call_count,1)
+
+    def test_worker_does_not_duplicate_repo_verification_retries(self):
         with TemporaryDirectory() as folder:
             with patch.object(code,"STATE",Path(folder)/"jobs.sqlite3"),patch.object(
-                    code,"verify_repo",side_effect=["GIT_NETWORK","SHA_NOT_APPROVED"]) as check,patch.object(
+                    code,"verify_repo",return_value="GIT_NETWORK") as check,patch.object(
                     code.time,"sleep") as sleeper:
                 out=code.perform(job("case_retry_001"))
-                self.assertEqual(out["status"],"SHA_NOT_APPROVED")
-                self.assertEqual(check.call_count,2)
-                self.assertEqual(sleeper.call_count,1)
+                self.assertEqual(out["status"],"GIT_UNAVAILABLE")
+                self.assertEqual(out["reason"],"GIT_NETWORK")
+                self.assertEqual(check.call_count,1)
+                sleeper.assert_not_called()
+
+    def test_auth_error_remains_sanitized(self):
+        with TemporaryDirectory() as folder:
+            with patch.object(code,"STATE",Path(folder)/"jobs.sqlite3"),patch.object(
+                    code,"verify_repo",return_value="GIT_AUTH"):
+                out=code.perform(job("case_auth_001"))
+                self.assertEqual(out["status"],"GIT_UNAVAILABLE")
+                self.assertEqual(out["reason"],"GIT_AUTH")
+                self.assertNotIn("token",str(out).lower())
 
     def test_id_conflict_does_not_reuse_wrong_result(self):
         with TemporaryDirectory() as folder:
