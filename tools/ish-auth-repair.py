@@ -72,7 +72,7 @@ def main():
         print("Old credentials remain unchanged.")
         return 1
     try:
-        store(token)
+        store(token,TOKEN_FILE)
     except (OSError,FileExistsError):
         print("Secure token save failed. Old credentials were not intentionally overwritten.")
         return 1
