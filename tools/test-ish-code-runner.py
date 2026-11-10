@@ -22,7 +22,7 @@ class CodeRunnerTests(unittest.TestCase):
             code.validate(dict(job(),command="rm -rf /"))
         with self.assertRaisesRegex(ValueError,"INVALID_SHA"):
             code.validate(job(sha="main"))
-        self.assertEqual(set(code.TASKS),{"PYTHON_SYNTAX","NODE_DUAL_TEST"})
+        self.assertEqual(set(code.TASKS),{"PYTHON_SYNTAX","NODE_DUAL_TEST","NODE_SYNTAX"})
 
     def test_one_id_is_only_executed_once(self):
         with TemporaryDirectory() as folder:
@@ -34,6 +34,13 @@ class CodeRunnerTests(unittest.TestCase):
                 self.assertFalse(first["cached"])
                 self.assertTrue(second["cached"])
                 self.assertEqual(check.call_count,1)
+
+    def test_node_version_gate(self):
+        with patch.object(code,"exec_fixed",return_value={"code":0,"output":"v14.21.3"}):
+            self.assertFalse(code.node_test_supported())
+        with patch.object(code,"exec_fixed",return_value={"code":0,"output":"v22.1.0"}):
+            self.assertTrue(code.node_test_supported())
+        self.assertEqual(code.TASKS["NODE_SYNTAX"][0][:2],["node","--check"])
 
     def test_transient_network_retry_is_bounded(self):
         with TemporaryDirectory() as folder:
