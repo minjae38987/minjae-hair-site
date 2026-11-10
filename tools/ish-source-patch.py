@@ -19,6 +19,11 @@ FILES=frozenset((
     "scripts/dual_runner_protocol.mjs",
     "scripts/dual_runner_router.mjs",
     "scripts/dual_runner_coordinator.mjs",
+    "scripts/dual_runner_actions.mjs",
+    "scripts/code_verify_actions.mjs",
+    "tests/dual_runner_protocol.test.mjs",
+    "tests/dual_runner_router.test.mjs",
+    "tests/dual_runner_coordinator.test.mjs",
 ))
 ACTION="PATCH_SOURCE_V1"
 MAX_SOURCE_BYTES=150000
