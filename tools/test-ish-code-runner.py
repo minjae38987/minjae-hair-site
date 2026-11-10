@@ -62,6 +62,13 @@ class CodeRunnerTests(unittest.TestCase):
             self.assertNotIn("MY_API_KEY",env)
             self.assertEqual(env["CI"],"1")
 
+    def test_failure_classification_and_counts(self):
+        meta=code.error_metadata({"code":1,"output":"not ok 2 - assertion\\n# pass 13\\n# fail 1\\n"})
+        self.assertEqual(meta["error_category"],"ASSERTION_FAILED")
+        self.assertEqual(meta["tests_passed"],13)
+        self.assertEqual(meta["tests_failed"],1)
+        self.assertRegex(meta["diagnostic_fingerprint"],r"^[0-9a-f]{12}$")
+
     def test_remote_url_is_fixed_owner_repo(self):
         with TemporaryDirectory() as folder:
             base=Path(folder)
