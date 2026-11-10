@@ -17,7 +17,7 @@ import urllib.error
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
-BRIDGE_PATH = Path(__file__).with_name("ish-bridge-v2.py")
+BRIDGE_PATH = Path(__file__).with_name("ish_bridge_v2.py")
 bridge = SourceFileLoader("ish_bridge_v2", str(BRIDGE_PATH)).load_module()
 OWNER = "minjae38987"
 ISSUE_PATH = "/repos/minjae38987/-2/issues/22/comments"
