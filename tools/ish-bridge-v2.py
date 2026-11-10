@@ -34,6 +34,8 @@ CODE_PREFIX = "ISH_CODE_REQUEST_V1 "
 WRITE_PREFIX = "ISH_WRITE_REQUEST_V1 "
 WRITE_RESULT = "ISH_WRITE_RESULT_V1 "
 PATCH_PREFIX = "ISH_PATCH_REQUEST_V1 "
+BATCH_PREFIX = "ISH_BATCH_REQUEST_V1 "
+BATCH_RESULT = "ISH_BATCH_RESULT_V1 "
 PATCH_RESULT = "ISH_PATCH_RESULT_V1 "
 CODE_RESULT = "ISH_CODE_RESULT_V1 "
 DUAL_PREFIX = "HAIR_JOB_V1 "
@@ -418,6 +420,44 @@ def poll(token):
                 send_shared(token,fail)
                 print("공통 작업 오류:",ident,type(exc).__name__,flush=True)
             checkpoint_set(ident);last=ident;continue
+        if body.startswith(BATCH_PREFIX):
+            # Separate V1 multi-file protocol. Legacy single-file path unchanged.
+            try:
+                if len(body)>18000: raise ValueError("batch_request_too_long")
+                job=json.loads(body[len(BATCH_PREFIX):].strip())
+                patcher=SourceFileLoader("ish_batch_patch",
+                    str(Path(__file__).with_name("ish-batch-patch.py"))).load_module()
+                patcher.validate(job)
+                rid=job["request_id"]
+            except (ValueError,TypeError,KeyError,ImportError,OSError):
+                print("Invalid batch request ignored:",ident,flush=True)
+                checkpoint_set(ident);last=ident;continue
+            try:
+                report=patcher.run(api,token,job)
+            except patcher.PermissionDenied as exc:
+                report={"request_id":rid,"action":patcher.ACTION,
+                        "status":"ERROR","reason":"GITHUB_HTTP_403_AT_"+exc.phase}
+            except urllib.error.HTTPError as exc:
+                report={"request_id":rid,"action":patcher.ACTION,
+                        "status":"ERROR","reason":"GITHUB_HTTP_"+str(exc.code)}
+            except Exception as exc:
+                report={"request_id":rid,"action":patcher.ACTION,
+                        "status":"ERROR","reason":"BATCH_RUNTIME_"+type(exc).__name__[:40]}
+            found=False
+            for comment in comments(token,ident):
+                if comment.get("user",{}).get("login","").lower()!=OWNER.lower():continue
+                raw=comment.get("body","")
+                if not isinstance(raw,str) or not raw.startswith(BATCH_RESULT):continue
+                try: prior=json.loads(raw[len(BATCH_RESULT):])
+                except (ValueError,TypeError):continue
+                if isinstance(prior,dict) and prior.get("request_id")==rid:
+                    found=True;break
+            if not found:
+                api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),
+                    token,{"body":BATCH_RESULT+json.dumps(report,separators=(",",":"))})
+            checkpoint_set(ident);last=ident
+            print("Restricted batch:",rid,report["status"],report["reason"],flush=True)
+            continue
         if body.startswith(PATCH_PREFIX):
             # Owner-approved exact replacement only. Never execute edited code.
             try:
