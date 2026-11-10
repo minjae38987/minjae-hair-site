@@ -43,9 +43,6 @@ def execute(api,token,req):
         return {"request_id":rid,"action":ALLOWED_ACTION,
                 "status":"ERROR","reason":reason,
                 "branch":branch,"content_sha256":digest}
-    head=api("GET",REPO+"/git/ref/heads/main",token)
-    if not isinstance(head,dict) or (head.get("object") or {}).get("sha")!=sha:
-        return fail("BASE_SHA_MISMATCH")
     # Probe existing branch first. A replay must not modify an existing
     # branch whose head no longer matches its expected starting point.
     existing=None
@@ -54,6 +51,9 @@ def execute(api,token,req):
     except urllib.error.HTTPError as e:
         if e.code!=404: raise
     if existing is None:
+        head=api("GET",REPO+"/git/ref/heads/main",token)
+        if not isinstance(head,dict) or (head.get("object") or {}).get("sha")!=sha:
+            return fail("BASE_SHA_MISMATCH")
         try:
             api("POST",REPO+"/git/refs",token,{"ref":"refs/heads/"+branch,"sha":sha})
         except urllib.error.HTTPError as e:
@@ -80,6 +80,10 @@ def execute(api,token,req):
                 "content_sha256":digest}
     if existing["object"]["sha"]!=sha:
         return fail("BRANCH_MOVED_BEFORE_WRITE")
+    # A pre-created but empty branch is also bound to the pinned main HEAD.
+    head=api("GET",REPO+"/git/ref/heads/main",token)
+    if not isinstance(head,dict) or (head.get("object") or {}).get("sha")!=sha:
+        return fail("BASE_SHA_MISMATCH")
     try:
         api("PUT",REPO+"/contents/"+target,token,{
             "message":"chore: iSH fixed proof "+rid,
