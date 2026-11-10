@@ -24,6 +24,8 @@ class FakeAPI:
             if self.branch is None:raise urllib.error.HTTPError(path,404,"notfound",None,None)
             return {"object":{"sha":self.branch}}
         if method=="POST" and path==m.REPO+"/git/refs":
+            if self.branch is not None:
+                raise urllib.error.HTTPError(path,422,"already exists",None,None)
             self.branch=payload["sha"];return {"object":{"sha":self.branch}}
         if "/contents/" in path and method=="GET":
             if self.content is None:raise urllib.error.HTTPError(path,404,"notfound",None,None)
@@ -72,7 +74,7 @@ class WriteTests(unittest.TestCase):
     def test_existing_branch_not_owned_fails(self):
         api=FakeAPI()
         api.branch="b"*40
-        self.assertEqual(m.execute(api,"secret",req())["reason"],"BRANCH_MOVED_BEFORE_WRITE")
+        self.assertEqual(m.execute(api,"secret",req())["reason"],"EXISTING_BRANCH_WITHOUT_PROOF")
         self.assertEqual(api.writes,0)
     def test_conflicting_existing_proof_fails(self):
         api=FakeAPI()
@@ -80,6 +82,34 @@ class WriteTests(unittest.TestCase):
         api.content=b"malicious"
         self.assertEqual(m.execute(api,"secret",req())["reason"],"EXISTING_PROOF_CONFLICT")
         self.assertEqual(api.writes,0)
+    def test_new_branch_never_gets_ref_before_post(self):
+        api=FakeAPI()
+        self.assertEqual(m.execute(api,"secret",req())["status"],"OK")
+        calls=api.calls
+        created=next(i for i,c in enumerate(calls) if c[0]=="POST" and c[1].endswith("/git/refs"))
+        self.assertFalse(any(c[0]=="GET" and "/git/ref/heads/ish-proof-" in c[1]
+                             for c in calls[:created]))
+
+    def test_existing_422_never_overwrites_even_if_same_base(self):
+        api=FakeAPI()
+        api.branch=SHA
+        result=m.execute(api,"secret",req())
+        self.assertEqual(result["reason"],"EXISTING_BRANCH_WITHOUT_PROOF")
+        self.assertEqual(api.writes,0)
+
+    def test_permission_denied_at_existing_ref_is_reported(self):
+        api=FakeAPI()
+        api.branch=SHA
+        orig=api.__call__
+        def forbidden(method,path,token,payload=None):
+            if method=="GET" and "/git/ref/heads/ish-proof-" in path:
+                raise urllib.error.HTTPError(path,403,"forbidden",None,None)
+            return orig(method,path,token,payload)
+        with self.assertRaises(m.WriteAccessDenied) as err:
+            m.execute(forbidden,"secret",req())
+        self.assertEqual(err.exception.phase,"READ_PROOF_REF")
+        self.assertEqual(api.writes,0)
+
     def test_branch_creation_uses_fixed_prefix(self):
         api=FakeAPI()
         m.execute(api,"secret",req())
