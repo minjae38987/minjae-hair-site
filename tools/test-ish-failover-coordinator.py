@@ -51,5 +51,83 @@ class CoordinatorTests(unittest.TestCase):
         with patch.object(mod,"emit",side_effect=lambda token,prefix,payload:outputs.append((prefix,payload))):
             mod.code_tick("unused",events,now=4000)
         self.assertEqual(outputs,[])
+
+class FastFailoverTests(unittest.TestCase):
+    def capture(self, events, now):
+        outputs=[]
+        with patch.object(mod,"emit",side_effect=lambda token,prefix,payload:outputs.append((prefix,payload))):
+            with patch.object(mod,"read_events",return_value=events):
+                mod.tick("unused",now=now)
+        return outputs
+
+    def basic(self, created=1000, dispatch=1010):
+        return [
+            event("MINJAE_AUTO_V1",{"request_id":"probe-101","task":"HEALTH_CHECK"},created),
+            event("MINJAE_JOB_V1",{"request_id":"probe-101-actions","runner":"actions",
+                "task":"HEALTH_CHECK"},dispatch)]
+
+    def test_probe_waits_from_actions_dispatch_not_creation(self):
+        self.assertEqual(self.capture(self.basic(),1049),[])
+        out=self.capture(self.basic(),1050)
+        self.assertEqual(len(out),1)
+        self.assertEqual(out[0][0],mod.ISH)
+        self.assertEqual(out[0][1]["request_id"],"probe-101-ish")
+
+    def test_probe_explicit_failure_falls_back_without_delay(self):
+        events=self.basic()
+        events.append(event("MINJAE_RESULT_V1",
+            {"request_id":"probe-101-actions","runner":"actions","task":"HEALTH_CHECK",
+             "status":"RUNNER_ERROR"},1015))
+        out=self.capture(events,1020)
+        self.assertEqual(len(out),1)
+        self.assertEqual(out[0][0],mod.ISH)
+
+    def test_probe_success_prioritized_after_expiration(self):
+        events=self.basic()
+        events.append(event("MINJAE_RESULT_V1",
+            {"request_id":"probe-101-actions","runner":"actions","task":"HEALTH_CHECK",
+             "status":"OK"},1100))
+        out=self.capture(events,4000)
+        self.assertEqual(len(out),1)
+        self.assertEqual(out[0][1]["status"],"OK")
+        self.assertEqual(out[0][1]["runner"],"actions")
+
+    def test_probe_ish_timeout_from_actual_dispatch(self):
+        events=self.basic()
+        events.append(event("ISH_V3_REQUEST",
+            {"request_id":"probe-101-ish","action":"PING"},1500))
+        self.assertEqual(self.capture(events,1510),[])
+        out=self.capture(events,1740)
+        self.assertEqual(len(out),1)
+        self.assertEqual(out[0][1]["status"],"TIMED_OUT")
+
+    def test_probe_wrong_task_error_does_not_fail_fast(self):
+        events=self.basic()
+        events.append(event("MINJAE_RESULT_V1",
+            {"request_id":"probe-101-actions","runner":"actions","task":"LUMI_PUBLIC",
+             "status":"RUNNER_ERROR"},1015))
+        self.assertEqual(self.capture(events,1020),[])
+
+    def test_code_waits_90s_from_actual_dispatch(self):
+        records=[
+            event("MINJAE_CODE_AUTO_V1",{"request_id":RID,"sha":SHA,
+                "task":"PYTHON_SYNTAX"},1000),
+            event("MINJAE_CODE_ACTIONS_REQUEST_V1",{"request_id":RID+"-actions",
+                "sha":SHA,"task":"PYTHON_SYNTAX"},1050)]
+        out=[]
+        with patch.object(mod,"emit",side_effect=lambda token,prefix,payload:out.append((prefix,payload))):
+            mod.code_tick("unused",records,now=1139)
+        self.assertEqual(out,[])
+        with patch.object(mod,"emit",side_effect=lambda token,prefix,payload:out.append((prefix,payload))):
+            mod.code_tick("unused",records,now=1140)
+        self.assertEqual(out[-1][0],mod.CODE_ISH)
+
+    def test_existing_final_never_reemits(self):
+        events=self.basic()
+        events.append(event("MINJAE_AUTO_RESULT_V1",
+            {"request_id":"probe-101","task":"HEALTH_CHECK",
+             "status":"OK","runner":"actions","reason":"ACTIONS_CONFIRMED"},1020))
+        self.assertEqual(self.capture(events,4000),[])
+
 if __name__=="__main__":
     unittest.main(verbosity=2)

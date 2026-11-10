@@ -30,7 +30,7 @@ ISH = "ISH_V3_REQUEST "
 ISH_RESULT = "ISH_V3_RESULT "
 TASKS = {"HEALTH_CHECK": "PING", "LUMI_PUBLIC": "LUMI_PUBLIC"}
 ID = re.compile(r"^[A-Za-z0-9._-]{4,64}$")
-ACTIONS_WAIT = 180
+ACTIONS_WAIT = 40
 ISH_WAIT = 240
 MAX_AGE = 1800
 CODE_AUTO = "MINJAE_CODE_AUTO_V1 "
@@ -42,7 +42,7 @@ CODE_FINAL = "MINJAE_CODE_AUTO_RESULT_V1 "
 CODE_TASKS = frozenset(("PYTHON_SYNTAX", "NODE_DUAL_TEST", "NODE_SYNTAX", "NODE_CORE_SYNTAX"))
 SHA = re.compile(r"^[a-f0-9]{40}$")
 CODE_ID = re.compile(r"^[A-Za-z0-9._-]{4,50}$")
-CODE_ACTIONS_WAIT = 180
+CODE_ACTIONS_WAIT = 90
 CODE_ISH_WAIT = 420
 
 
@@ -83,8 +83,8 @@ def emit(token, prefix, obj):
 
 def index_events(events):
     requests = {}
-    actions_jobs = set()
-    ish_jobs = set()
+    actions_jobs = {}
+    ish_jobs = {}
     actions_results = {}
     ish_results = {}
     finals = set()
@@ -97,10 +97,10 @@ def index_events(events):
                 requests.setdefault(rid, (raw["task"], utc_seconds(entry.get("created_at"))))
         raw = event_data(entry, ACTIONS)
         if raw and who == OWNER and raw.get("runner") == "actions":
-            actions_jobs.add(raw.get("request_id"))
+            actions_jobs.setdefault(raw.get("request_id"), utc_seconds(entry.get("created_at")))
         raw = event_data(entry, ISH)
         if raw and who == OWNER and raw.get("action") in TASKS.values():
-            ish_jobs.add(raw.get("request_id"))
+            ish_jobs.setdefault(raw.get("request_id"), utc_seconds(entry.get("created_at")))
         raw = event_data(entry, ACTIONS_RESULT)
         if raw and who in ("github-actions[bot]", OWNER) and raw.get("runner") == "actions":
             actions_results[raw.get("request_id")] = raw
@@ -125,6 +125,20 @@ def tick(token, now=None):
             continue
         aid = rid + "-actions"
         iid = rid + "-ish"
+        a = ar.get(aid)
+        i = ir.get(iid)
+        # Terminal successes take precedence over time limits after iPad suspension.
+        if (a and a.get("request_id") == aid and a.get("runner") == "actions"
+                and a.get("task") == task and a.get("status") == "OK"):
+            result(token, rid, task, "OK", "actions", "ACTIONS_CONFIRMED")
+            continue
+        if (i and i.get("request_id") == iid and i.get("action") == TASKS[task]
+                and i.get("status") == "OK"):
+            data = i.get("data") or {}
+            if (task == "HEALTH_CHECK" and data.get("bridge") == "online") or (
+                    task == "LUMI_PUBLIC" and data.get("http_status") == 200):
+                result(token, rid, task, "OK", "ish", "ACTIONS_UNCONFIRMED_OR_FAILED")
+                continue
         if now - created > MAX_AGE:
             result(token, rid, task, "TIMED_OUT", "none", "REQUEST_EXPIRED")
             continue
@@ -132,33 +146,30 @@ def tick(token, now=None):
             emit(token, ACTIONS, {"request_id": aid, "runner": "actions", "task": task})
             print("Dispatched Actions:", rid, flush=True)
             continue
-        a = ar.get(aid)
-        if a and a.get("task") == task and a.get("status") == "OK":
-            result(token, rid, task, "OK", "actions", "ACTIONS_CONFIRMED")
-            continue
-        # Only idempotent, read-only tasks are eligible. Absence of a result
-        # is not proof of quota exhaustion. A late Actions run is harmless.
-        if now - created < ACTIONS_WAIT and not (a and a.get("status") != "OK"):
+        # Fail fast only on a correlated, explicit non-OK Actions result.
+        failed = (isinstance(a, dict) and a.get("request_id") == aid
+                  and a.get("runner") == "actions" and a.get("task") == task
+                  and a.get("status") in (
+                      "ERROR", "NOT_CONFIGURED", "REJECTED", "UNCONFIRMED",
+                      "SITE_UNAVAILABLE", "UI_OR_NETWORK_ERROR", "RUNNER_ERROR"))
+        # Use actual Actions dispatch time, not original request creation.
+        actions_dispatched_at = aj.get(aid) or created
+        if now - actions_dispatched_at < ACTIONS_WAIT and not failed:
             continue
         if iid not in ij:
             emit(token, ISH, {"request_id": iid, "action": TASKS[task]})
             print("Failover to iSH:", rid, flush=True)
             continue
-        i = ir.get(iid)
-        if i and i.get("status") == "OK" and i.get("action") == TASKS[task]:
-            data = i.get("data") or {}
-            if (task == "HEALTH_CHECK" and data.get("bridge") == "online") or (
-                    task == "LUMI_PUBLIC" and data.get("http_status") == 200):
-                result(token, rid, task, "OK", "ish", "ACTIONS_UNCONFIRMED_OR_FAILED")
-                continue
-        if now - created >= ACTIONS_WAIT + ISH_WAIT:
+        # Timeout starts when the iSH command is posted.
+        ish_dispatched_at = ij.get(iid) or created
+        if now - ish_dispatched_at >= ISH_WAIT:
             result(token, rid, task, "TIMED_OUT", "ish", "NO_CONFIRMED_SUCCESS")
     code_tick(token, events, now)
     return len(requests)
 
 def code_tick(token, events, now):
     """Event-sourced, read-only code verification using one pinned SHA."""
-    jobs, actions_sent, ish_sent, ar, ir, finals = {}, set(), {}, {}, {}, set()
+    jobs, actions_sent, ish_sent, ar, ir, finals = {}, {}, {}, {}, {}, set()
     for e in events:
         who = author(e)
         raw = event_data(e, CODE_AUTO)
@@ -168,7 +179,8 @@ def code_tick(token, events, now):
                     isinstance(sha,str) and SHA.fullmatch(sha)) and task in CODE_TASKS:
                 jobs.setdefault(rid,(sha,task,utc_seconds(e.get("created_at"))))
         raw = event_data(e, CODE_ACTIONS)
-        if raw and who == OWNER: actions_sent.add(raw.get("request_id"))
+        if raw and who == OWNER:
+            actions_sent.setdefault(raw.get("request_id"), utc_seconds(e.get("created_at")))
         raw = event_data(e, CODE_ISH)
         if raw and who == OWNER:
             ish_sent[raw.get("request_id")] = utc_seconds(e.get("created_at"))
@@ -209,7 +221,7 @@ def code_tick(token, events, now):
             else:
                 emit(token,CODE_ACTIONS,{"request_id":aid,"sha":sha,"task":task})
             continue
-        if now-created<CODE_ACTIONS_WAIT and not valid(a,"actions"):
+        if now-(actions_sent.get(aid) or created)<CODE_ACTIONS_WAIT and not valid(a,"actions"):
             continue
         if iid not in ish_sent:
             if now-created>MAX_AGE:
