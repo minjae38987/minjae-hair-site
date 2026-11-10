@@ -45,6 +45,28 @@ CODE_ID = re.compile(r"^[A-Za-z0-9._-]{4,50}$")
 CODE_ACTIONS_WAIT = 90
 CODE_ISH_WAIT = 420
 
+# Diagnostics must never delay the functional failover decision.
+PROBE_PATH = Path(__file__).with_name("actions-run-probe.py")
+_probe_attempted = set()
+
+def observe_actions_failure(token, request_id, dispatched_at, category):
+    """Best-effort, bounded observation; no new Issue comments or mutations."""
+    if request_id in _probe_attempted:
+        return
+    _probe_attempted.add(request_id)
+    try:
+        module = SourceFileLoader("actions_run_probe", str(PROBE_PATH)).load_module()
+        details = module.probe(bridge.api, token, dispatched_at, category)
+        print("Actions diagnostic:", request_id,
+              details.get("category", "UNVERIFIED"),
+              details.get("association", details.get("evidence", "unknown")),
+              flush=True)
+    except Exception as exc:
+        # A diagnostics failure cannot block an already-issued iSH request.
+        print("Actions diagnostic unavailable:", request_id,
+              type(exc).__name__, flush=True)
+
+
 
 def utc_seconds(value):
     try:
@@ -159,6 +181,7 @@ def tick(token, now=None):
         if iid not in ij:
             emit(token, ISH, {"request_id": iid, "action": TASKS[task]})
             print("Failover to iSH:", rid, flush=True)
+            observe_actions_failure(token, aid, actions_dispatched_at, "general")
             continue
         # Timeout starts when the iSH command is posted.
         ish_dispatched_at = ij.get(iid) or created
@@ -228,6 +251,7 @@ def code_tick(token, events, now):
                 done("TIMED_OUT","none","REQUEST_EXPIRED")
             else:
                 emit(token,CODE_ISH,{"request_id":iid,"sha":sha,"task":task})
+                observe_actions_failure(token, aid, actions_sent.get(aid) or created, "code")
             continue
         # Start the iSH timeout when the iSH request was actually posted,
         # NOT from the original Actions request.
