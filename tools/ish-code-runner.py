@@ -27,6 +27,7 @@ TASKS = {
                         "tests/dual_runner_protocol.test.mjs",
                         "tests/dual_runner_router.test.mjs",
                         "tests/dual_runner_coordinator.test.mjs"], 110),
+    "NODE_SYNTAX": (["node", "--check", "scripts/dual_runner_coordinator.mjs"], 50),
 }
 # These tests must never write to external services. An explicit profile is
 # required to add other suites after review.
@@ -136,6 +137,18 @@ def verify_repo(sha):
                          sha, ref["output"].strip()])
     return "OK" if parent["code"] == 0 else "SHA_NOT_APPROVED"
 
+def node_test_supported():
+    check=exec_fixed(["node","--version"],timeout=10,env=clean_env())
+    if check["code"]!=0:
+        return False
+    found=re.fullmatch(r"v(\\d+)\\.(\\d+)\\.(\\d+)",check["output"].strip())
+    if not found:
+        return False
+    major,minor=int(found.group(1)),int(found.group(2))
+    # node:test is present from v16.17 but the repository's maintained
+    # modern regression runner is only supported on Node >=18.
+    return major>=18
+
 def perform(req):
     rid, sha, task = validate(req)
     db = open_db()
@@ -164,6 +177,10 @@ def perform(req):
             if shutil.which(argv[0]) is None:
                 outcome = result(rid, sha, task, "DEPENDENCY_MISSING",
                                  "RUNTIME_NOT_INSTALLED", code=127, elapsed=time.monotonic()-start)
+            elif task == "NODE_DUAL_TEST" and not node_test_supported():
+                outcome = result(rid, sha, task, "DEPENDENCY_MISSING",
+                                 "NODE_VERSION_UNSUPPORTED", code=127,
+                                 elapsed=time.monotonic()-start)
             else:
                 with tempfile.TemporaryDirectory(prefix="minjae-code-", dir="/tmp") as folder:
                     path = Path(folder) / "workspace"
