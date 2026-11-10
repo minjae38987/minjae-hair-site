@@ -3,6 +3,7 @@
 Python 3.9+. No Git pulls, no arbitrary code execution, no credential exfiltration.
 """
 import getpass
+import hashlib
 from importlib.machinery import SourceFileLoader
 import fcntl
 import html.parser
@@ -37,9 +38,19 @@ DUAL_ALLOWED = frozenset(("PING","LUMI_PUBLIC","GIT_DIAG","PYTHON_ENV","LUMI_AUT
 SHARED_PREFIX = "MINJAE_JOB_V1 "
 SHARED_RESULT = "MINJAE_RESULT_V1 "
 SHARED_TASKS = frozenset(("HEALTH_CHECK", "LUMI_PUBLIC"))
-ACTIONS = frozenset(("PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG", "LUMI_AUTH_MAP", "TASK_PLAN_V1", "CAPABILITIES", "LUMI_LOGIN_FLOW"))
+ACTIONS = frozenset(("RUNTIME_STATUS", "PING", "LUMI_PUBLIC", "LUMI_JS_META", "PYTHON_ENV", "GIT_DIAG", "LUMI_AUTH_MAP", "TASK_PLAN_V1", "CAPABILITIES", "LUMI_LOGIN_FLOW"))
 PLAN_STEPS = frozenset(("ping", "python_env", "git_diag", "lumi_public", "lumi_js_meta", "lumi_auth_map", "lumi_public_js_terms"))
 FIXED_JS_TERMS = frozenset(("login","password","auth","fetch(","localStorage","sessionStorage","Authorization","Bearer ","signInWith","axios","XMLHttpRequest","csrf","cookie"))
+
+# A running bridge advertises its process-loaded version, not merely the
+# contents of a file that might have been replaced since startup.
+BRIDGE_LOADED_DIGEST = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+def runtime_status():
+    status_path = Path(__file__).with_name("ish-runtime-status.py")
+    status_module = SourceFileLoader("ish_runtime_status", str(status_path)).load_module()
+    return status_module.snapshot(BRIDGE_LOADED_DIGEST)
+
 
 def api(method, path, token, payload=None):
     data = json.dumps(payload, ensure_ascii=False).encode() if payload is not None else None
@@ -249,6 +260,7 @@ def task_plan(request):
 def run_action(action, request=None):
     if action == "TASK_PLAN_V1": return task_plan(request or {})
     if action == "CAPABILITIES": return {"allowed_actions":sorted(ACTIONS),"plan_steps":sorted(PLAN_STEPS),"dual_runner_jobs":sorted(DUAL_ALLOWED),"arbitrary_shell":False,"github_actions_required":False}
+    if action == "RUNTIME_STATUS": return runtime_status()
     if action == "PING": return {"bridge":"online","python":sys.version.split()[0],"github_actions_used":False}
     if action == "PYTHON_ENV": return {"python":sys.version.split()[0],"platform":sys.platform}
     if action == "GIT_DIAG": return git_diag()
