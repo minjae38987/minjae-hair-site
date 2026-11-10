@@ -120,14 +120,21 @@ def open_db():
 
 def mark_verified_commit(sha):
     """Trust is created ONLY after a successful online main-ancestry check."""
-    with open_db() as db:
+    db=open_db()
+    try:
         db.execute("INSERT OR REPLACE INTO verified_commits VALUES(?,?)",
                    (sha,int(time.time())))
+        db.commit()
+    finally:
+        db.close()
 
 def locally_verified_commit(sha):
     """Allow offline repeat only for the identical previously approved SHA."""
-    with open_db() as db:
+    db=open_db()
+    try:
         row=db.execute("SELECT verified_at FROM verified_commits WHERE sha=?",(sha,)).fetchone()
+    finally:
+        db.close()
     if not row:
         return False
     # Exact Git object must still exist in the trusted origin worktree.
