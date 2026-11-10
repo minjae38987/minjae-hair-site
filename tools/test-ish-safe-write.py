@@ -56,6 +56,14 @@ class WriteTests(unittest.TestCase):
         self.assertEqual(m.execute(api,"secret",req())["status"],"OK")
         self.assertEqual(m.execute(api,"secret",req())["reason"],"ALREADY_COMMITTED")
         self.assertEqual(api.writes,1)
+    def test_idempotent_retry_after_main_advances(self):
+        api=FakeAPI()
+        self.assertEqual(m.execute(api,"secret",req())["status"],"OK")
+        api.base="c"*40
+        repeat=m.execute(api,"secret",req())
+        self.assertEqual(repeat["reason"],"ALREADY_COMMITTED")
+        self.assertEqual(api.writes,1)
+
     def test_stale_base_fails_closed(self):
         api=FakeAPI()
         api.base="b"*40
