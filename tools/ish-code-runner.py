@@ -75,11 +75,11 @@ def error_metadata(raw):
     category = next((name for name, words in patterns if any(w in lower for w in words)), "TEST_FAILURE")
     # No raw stdout, paths, user inputs, environment variables or tokens.
     # Categorization and bounded counters are enough to choose a repair path.
-    passed = re.search(r"(?m)^# pass (\\d+)\\s*$",data)
-    failed = re.search(r"(?m)^# fail (\\d+)\\s*$",data)
+    passed = re.search(r"(?m)^# pass (\d+)\s*$",data)
+    failed = re.search(r"(?m)^# fail (\d+)\s*$",data)
     return {"error_category":category,
             "diagnostic_fingerprint":hashlib.sha256(
-                (category+"|"+str(raw.get("code"))).encode()).hexdigest()[:12],
+                (category+"|"+str(raw.get("code"))+"|"+re.sub(r"[0-9]+","#",data[:500])).encode()).hexdigest()[:12],
             "tests_passed":int(passed.group(1)) if passed else None,
             "tests_failed":int(failed.group(1)) if failed else None}
 
