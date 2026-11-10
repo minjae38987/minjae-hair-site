@@ -3,6 +3,7 @@
 Python 3.9+. No Git pulls, no arbitrary code execution, no credential exfiltration.
 """
 import getpass
+import fcntl
 import html.parser
 import json
 import os
@@ -25,6 +26,8 @@ TOKEN_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "github_token"
 STATE_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "last_comment_id"
 PREFIX = "ISH_V2_REQUEST "
 RESULT = "ISH_V2_RESULT "
+V3_PREFIX = "ISH_V3_REQUEST "
+V3_RESULT = "ISH_V3_RESULT "
 DUAL_PREFIX = "HAIR_JOB_V1 "
 DUAL_RESULT = "HAIR_JOB_RESULT_V1 "
 DUAL_ALLOWED = frozenset(("PING","LUMI_PUBLIC","GIT_DIAG","PYTHON_ENV","LUMI_AUTH_MAP","LUMI_LOGIN_FLOW"))
@@ -292,11 +295,13 @@ def comments(token, since_id=0):
         if len(batch)<100: return results
     raise ValueError("issue_comment_page_limit")
 
-def send(token, request_id, status, data):
+def send(token, request_id, status, data, prefix=RESULT, action=None):
     payload = {"request_id":request_id,"status":status,"data":data}
+    if action is not None:
+        payload["action"] = action
     try:
         api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),token,
-            {"body":RESULT + json.dumps(payload,ensure_ascii=False,separators=(",",":"))})
+            {"body":prefix + json.dumps(payload,ensure_ascii=False,separators=(",",":"))})
     except urllib.error.HTTPError as exc:
         print("Issue #22 결과 전송 실패: HTTP",exc.code,flush=True)
         raise
@@ -377,33 +382,49 @@ def poll(token):
         if body.startswith(DUAL_PREFIX):
             dual_job(token,body)
             checkpoint_set(ident);last=ident;continue
-        if not body.startswith(PREFIX):
+        is_v3 = body.startswith(V3_PREFIX)
+        if not is_v3 and not body.startswith(PREFIX):
             checkpoint_set(ident);last=ident;continue
+        prefix = V3_PREFIX if is_v3 else PREFIX
+        out_prefix = V3_RESULT if is_v3 else RESULT
         try:
-            request=json.loads(body[len(PREFIX):].strip())
-            expected={"request_id","action","steps"} if request.get("action")=="TASK_PLAN_V1" else {"request_id","action"}
-            if set(request)!=expected: raise ValueError("요청 형식 오류")
-            # Other authorized iSH worker generations may share this issue.
-            # Ignore unsupported actions rather than emitting misleading
-            # ValueError results for historical requests.
-            if request["action"] not in ACTIONS:
-                print("지원하지 않는 기존 작업 건너뜀:", ident, flush=True)
+            request=json.loads(body[len(prefix):].strip())
+            if not isinstance(request,dict): raise ValueError("invalid_request")
+            action=request.get("action")
+            expected={"request_id","action","steps"} if action=="TASK_PLAN_V1" else {"request_id","action"}
+            if set(request)!=expected: raise ValueError("invalid_fields")
+            if action not in ACTIONS:
+                print("Unsupported request ignored:",ident,flush=True)
                 checkpoint_set(ident);last=ident;continue
-            if not isinstance(request["request_id"],str) or len(request["request_id"])>80:
-                raise ValueError("request_id 오류")
-            result=run_action(request["action"],request)
-            send(token,request["request_id"],"OK",result)
-            print("완료:",request["request_id"],request["action"],flush=True)
-        except Exception as exc:
-            # Never place exception details or secrets in the issue.
-            try: send(token,str(ident),"ERROR",{"type":type(exc).__name__})
-            except Exception: print("결과 전송 실패",flush=True);raise
-            print("작업 실패:",ident,type(exc).__name__,flush=True)
+            rid=request.get("request_id")
+            if not isinstance(rid,str) or not re.fullmatch(r"[A-Za-z0-9._-]{4,80}",rid):
+                raise ValueError("invalid_request_id")
+            try:
+                data=run_action(action,request)
+                status="OK"
+            except urllib.error.HTTPError as exc:
+                data={"http_status":exc.code}
+                status="ERROR"
+            except Exception as exc:
+                data={"type":type(exc).__name__}
+                status="ERROR"
+            send(token,rid,status,data,prefix=out_prefix,action=action)
+            print("Completed:",rid,action,status,flush=True)
+        except (ValueError,TypeError,KeyError,json.JSONDecodeError):
+            print("Malformed request ignored:",ident,flush=True)
         checkpoint_set(ident);last=ident
     return last
 
 def main():
-    print("iSH 제한형 원격 브리지 V2 | 허용된 읽기 전용 검사만 실행",flush=True)
+    lock_path=TOKEN_FILE.parent / "bridge.lock"
+    lock_path.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+    lock=open(lock_path,"a+")
+    try:
+        fcntl.flock(lock.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("iSH bridge already active; duplicate disabled",flush=True)
+        return
+    print("iSH 제한형 원격 브리지 V3 | 이전 V2 작업도 지원",flush=True)
     token=token_get()
     print("GitHub 인증 확인. Ctrl-C 로 종료. iSH 앱을 전면에 유지하세요.",flush=True)
     while True:
