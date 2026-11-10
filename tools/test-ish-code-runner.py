@@ -91,6 +91,24 @@ class CodeRunnerTests(unittest.TestCase):
                 with patch.object(code,"exec_fixed",return_value={"code":1,"output":""}):
                     self.assertFalse(code.locally_verified_commit(SHA))
 
+    def test_cached_sha_skips_network_fetch(self):
+        with TemporaryDirectory() as folder:
+            base=Path(folder)
+            (base/".git").mkdir()
+            actions=[]
+            def fake(argv,**kwargs):
+                actions.append(argv)
+                if argv[-3:]==["remote","get-url","origin"]:
+                    return {"code":0,"output":"https://github.com/minjae38987/-2.git"}
+                if argv[-3:]==["cat-file","-e",SHA+"^{commit}"]:
+                    return {"code":0,"output":""}
+                raise AssertionError("Unexpected remote Git fetch on trusted SHA")
+            with patch.object(code,"STATE",base/"trust.sqlite3"),patch.object(
+                    code,"REPO",base),patch.object(code,"exec_fixed",side_effect=fake):
+                code.mark_verified_commit(SHA)
+                self.assertEqual(code.verify_repo(SHA),"OK_CACHED")
+            self.assertFalse(any("fetch" in argv for argv in actions))
+
     def test_validated_cache_used_only_after_fetch_failure(self):
         with TemporaryDirectory() as folder:
             base=Path(folder)
