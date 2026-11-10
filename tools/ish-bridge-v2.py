@@ -383,28 +383,35 @@ def poll(token):
                 print("공통 작업 오류:",ident,type(exc).__name__,flush=True)
             checkpoint_set(ident);last=ident;continue
         if body.startswith(CODE_PREFIX):
-            # New code runner has a separate strict protocol. Never execute
-            # arbitrary shell strings, commit refs or user-supplied file paths.
-            request = None
+            # Invalid jobs are ignored; internal failures return a sanitized
+            # error instead of crashing the persistent bridge process.
             try:
-                if len(body) > 1200: raise ValueError("oversized_request")
-                request = json.loads(body[len(CODE_PREFIX):].strip())
-                worker_path = Path(__file__).with_name("ish-code-runner.py")
-                code_runner = SourceFileLoader("ish_code_runner",str(worker_path)).load_module()
-                job_result = code_runner.perform(request)
-                api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),
-                    token, {"body":CODE_RESULT + json.dumps(
-                        job_result,ensure_ascii=False,separators=(",",":"))})
-                print("Code job:",job_result["request_id"],job_result["status"],flush=True)
-            except (ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:
-                print("Invalid code request ignored:",ident,type(exc).__name__,flush=True)
+                if len(body)>1200: raise ValueError("oversized_request")
+                request=json.loads(body[len(CODE_PREFIX):].strip())
+                worker_path=Path(__file__).with_name("ish-code-runner.py")
+                code_runner=SourceFileLoader("ish_code_runner",str(worker_path)).load_module()
+                rid,sha,task=code_runner.validate(request)
+            except (ValueError,KeyError,TypeError,json.JSONDecodeError,ImportError,OSError):
+                print("Invalid code request ignored:",ident,flush=True)
+                checkpoint_set(ident);last=ident;continue
+            try:
+                job_result=code_runner.perform(request)
             except Exception as exc:
-                # Error types only; no potentially sensitive exception strings.
-                print("Code runner failed:",ident,type(exc).__name__,flush=True)
-                # Do not checkpoint execution failures: a restarted process can
-                # retry using the runner's durable request_id result cache.
-                raise
-            checkpoint_set(ident);last=ident;continue
+                # Return only an error category, never the underlying message.
+                job_result={"request_id":rid,"sha":sha,"task":task,
+                            "status":"EXECUTION_ERROR","reason":"INTERNAL_RUNNER_EXCEPTION",
+                            "runner":"ish","exit_code":None,"cached":False,
+                            "duration_ms":0,"logs_exported":False,
+                            "video_executed":False,"diagnostics":{"error_category":type(exc).__name__[:40]}}
+                print("Code runner internal error:",type(exc).__name__,flush=True)
+            # A failed GitHub post must NOT advance the checkpoint.
+            # The SQLite result cache prevents a second code execution.
+            api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),
+                token,{"body":CODE_RESULT+json.dumps(
+                    job_result,ensure_ascii=False,separators=(",",":"))})
+            checkpoint_set(ident);last=ident
+            print("Code job result delivered:",rid,job_result["status"],flush=True)
+            continue
         if body.startswith(DUAL_PREFIX):
             dual_job(token,body)
             checkpoint_set(ident);last=ident;continue
