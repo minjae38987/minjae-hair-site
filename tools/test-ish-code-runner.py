@@ -91,6 +91,26 @@ class CodeRunnerTests(unittest.TestCase):
                 with patch.object(code,"exec_fixed",return_value={"code":1,"output":""}):
                     self.assertFalse(code.locally_verified_commit(SHA))
 
+    def test_upgrade_uses_prior_pass_but_not_prior_failure(self):
+        with TemporaryDirectory() as folder:
+            base=Path(folder)
+            with patch.object(code,"STATE",base/"legacy.sqlite3"),patch.object(
+                    code,"REPO",base),patch.object(
+                    code,"exec_fixed",return_value={"code":0,"output":""}):
+                db=code.open_db()
+                db.execute("INSERT INTO jobs VALUES(?,?,?,?,?)",
+                           ("old_success",SHA,"NODE_CORE_SYNTAX",
+                            __import__("json").dumps(code.result("old_success",SHA,
+                               "NODE_CORE_SYNTAX","OK","PASS",code=0)),123))
+                db.execute("INSERT INTO jobs VALUES(?,?,?,?,?)",
+                           ("old_failure",SHA2,"NODE_CORE_SYNTAX",
+                            __import__("json").dumps(code.result("old_failure",SHA2,
+                               "NODE_CORE_SYNTAX","TEST_FAILED","TEST_FAILED",code=1)),124))
+                db.commit()
+                db.close()
+                self.assertTrue(code.locally_verified_commit(SHA))
+                self.assertFalse(code.locally_verified_commit(SHA2))
+
     def test_cached_sha_skips_network_fetch(self):
         with TemporaryDirectory() as folder:
             base=Path(folder)
