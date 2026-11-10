@@ -10,6 +10,9 @@ on:
       - 'tools/test-ish-code-runner.py'
       - 'tools/actions-failure-diagnostic.py'
       - 'tools/test-actions-failure-diagnostic.py'
+      - 'tools/actions-run-probe.py'
+      - 'tools/test-actions-run-probe.py'
+      - 'tools/start-ish-worker.sh'
       - '.github/workflows/ish-failover-regression.yml'
   workflow_dispatch:
 
@@ -32,10 +35,14 @@ jobs:
       - name: Prepare same bridge import alias as iSH launcher
         run: cp tools/ish-bridge-v2.py tools/ish_bridge_v2.py
       - name: Verify Python syntax
-        run: python3 -m py_compile tools/ish-bridge-v2.py tools/ish-failover-coordinator.py tools/ish-code-runner.py tools/test-ish-code-runner.py tools/test-ish-failover-coordinator.py tools/actions-failure-diagnostic.py tools/test-actions-failure-diagnostic.py
+        run: python3 -m py_compile tools/ish-bridge-v2.py tools/ish-failover-coordinator.py tools/ish-code-runner.py tools/test-ish-code-runner.py tools/test-ish-failover-coordinator.py tools/actions-failure-diagnostic.py tools/test-actions-failure-diagnostic.py tools/actions-run-probe.py tools/test-actions-run-probe.py
       - name: Run offline failover regression
         run: python3 tools/test-ish-failover-coordinator.py
       - name: Run offline code-runner regression
         run: python3 tools/test-ish-code-runner.py
       - name: Run Actions failure diagnosis regression
         run: python3 tools/test-actions-failure-diagnostic.py
+      - name: Run Actions run probe regression
+        run: python3 tools/test-actions-run-probe.py
+      - name: Verify iSH launcher shell syntax
+        run: sh -n tools/start-ish-worker.sh
