@@ -25,6 +25,7 @@ MODULES = {
     "run_probe": ROOT / "actions-run-probe.py",
     "safe_write": ROOT / "ish-safe-write.py",
     "auth_repair": ROOT / "ish-auth-repair.py",
+    "source_patch": ROOT / "ish-source-patch.py",
 }
 
 def digest(path):
