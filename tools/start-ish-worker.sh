@@ -2,7 +2,10 @@
 # Fail-closed installer and supervisor for iSH code verification.
 # Verify the entire candidate release before replacing running files.
 set -eu
-BASE='https://raw.githubusercontent.com/minjae38987/minjae-hair-site/ish-worker-stable/tools'
+# Freeze all files to one immutable approved commit to avoid mixed releases.
+METADATA=$(curl -fsSL --max-time 35 'https://api.github.com/repos/minjae38987/minjae-hair-site/git/ref/heads/ish-worker-stable')
+COMMIT=$(printf '%s' "$METADATA" | python3 -c 'import sys,json,re; x=json.load(sys.stdin)["object"]["sha"]; assert re.fullmatch("[0-9a-f]{40}",x); print(x)')
+BASE="https://raw.githubusercontent.com/minjae38987/minjae-hair-site/$COMMIT/tools"
 STAGE=$(mktemp -d /root/ish-release.XXXXXX)
 COORD_PID=''
 umask 077
@@ -27,7 +30,7 @@ mv "$STAGE/ish-bridge-v2.py" /root/ish_bridge_v2.py
 mv "$STAGE/ish-failover-coordinator.py" /root/ish-failover-coordinator.py
 mv "$STAGE/ish-code-runner.py" /root/ish-code-runner.py
 chmod 600 /root/ish_bridge_v2.py /root/ish-failover-coordinator.py /root/ish-code-runner.py
-echo 'iSH V4 release verified: Python syntax and code-runner regression suite passed'
+echo "iSH V4 pinned release $COMMIT: syntax and regression tests passed"
 python3 /root/ish-failover-coordinator.py &
 COORD_PID=$!
 python3 /root/ish_bridge_v2.py
