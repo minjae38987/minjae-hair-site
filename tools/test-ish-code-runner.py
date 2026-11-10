@@ -42,6 +42,35 @@ class CodeRunnerTests(unittest.TestCase):
             self.assertTrue(code.node_test_supported())
         self.assertEqual(code.TASKS["NODE_SYNTAX"][0][:2],["node","--check"])
 
+    def test_node_core_syntax_targets_are_explicit(self):
+        self.assertEqual(len(code.NODE_SYNTAX_FILES),10)
+        self.assertEqual(len(set(code.NODE_SYNTAX_FILES)),10)
+        self.assertTrue(all(name.startswith(("scripts/","tests/")) and
+                            name.endswith(".mjs") for name in code.NODE_SYNTAX_FILES))
+
+    def test_node_core_syntax_short_circuits_on_failure(self):
+        calls=[]
+        def command(argv,**kwargs):
+            calls.append(argv)
+            return {"code": 1 if len(calls)==2 else 0,
+                    "output":"SyntaxError" if len(calls)==2 else "",
+                    "truncated":False}
+        with patch.object(code,"exec_fixed",side_effect=command):
+            result=code.check_node_files(Path("/tmp/test_worktree"))
+        self.assertEqual(result["code"],1)
+        self.assertEqual(len(calls),2)
+        self.assertEqual(calls[0][:2],["node","--check"])
+
+    def test_node_core_syntax_all_files_are_checked(self):
+        calls=[]
+        def command(argv,**kwargs):
+            calls.append(argv)
+            return {"code":0,"output":"","truncated":False}
+        with patch.object(code,"exec_fixed",side_effect=command):
+            result=code.check_node_files(Path("/tmp/test_worktree"))
+        self.assertEqual(result["code"],0)
+        self.assertEqual(len(calls),len(code.NODE_SYNTAX_FILES))
+
     def test_transient_network_retry_is_bounded(self):
         with TemporaryDirectory() as folder:
             with patch.object(code,"STATE",Path(folder)/"jobs.sqlite3"),patch.object(
