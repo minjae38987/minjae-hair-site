@@ -158,7 +158,7 @@ def tick(token, now=None):
 
 def code_tick(token, events, now):
     """Event-sourced, read-only code verification using one pinned SHA."""
-    jobs, actions_sent, ish_sent, ar, ir, finals = {}, set(), set(), {}, {}, set()
+    jobs, actions_sent, ish_sent, ar, ir, finals = {}, set(), {}, {}, {}, set()
     for e in events:
         who = author(e)
         raw = event_data(e, CODE_AUTO)
@@ -170,7 +170,8 @@ def code_tick(token, events, now):
         raw = event_data(e, CODE_ACTIONS)
         if raw and who == OWNER: actions_sent.add(raw.get("request_id"))
         raw = event_data(e, CODE_ISH)
-        if raw and who == OWNER: ish_sent.add(raw.get("request_id"))
+        if raw and who == OWNER:
+            ish_sent[raw.get("request_id")] = utc_seconds(e.get("created_at"))
         raw = event_data(e, CODE_ACTIONS_RESULT)
         if raw and who in (OWNER,"github-actions[bot]"):
             ar[raw.get("request_id")] = raw
@@ -190,28 +191,35 @@ def code_tick(token, events, now):
         def done(status, runner, reason):
             emit(token,CODE_FINAL,{"request_id":rid,"sha":sha,"task":task,
                                   "status":status,"runner":runner,"reason":reason})
-        if now-created>MAX_AGE:
-            done("TIMED_OUT","none","REQUEST_EXPIRED")
-            continue
-        if aid not in actions_sent:
-            emit(token,CODE_ACTIONS,{"request_id":aid,"sha":sha,"task":task})
-            continue
         a=ar.get(aid)
+        i=ir.get(iid)
+        # Completed results have priority over age/timeout checks. A worker
+        # may finish just as the coordinator wakes up after iPad suspension.
         if valid(a,"actions") and a.get("status")=="OK":
             done("OK","actions","ACTIONS_CONFIRMED")
             continue
-        if now-created<CODE_ACTIONS_WAIT and not valid(a,"actions"):
-            continue
-        if iid not in ish_sent:
-            emit(token,CODE_ISH,{"request_id":iid,"sha":sha,"task":task})
-            continue
-        i=ir.get(iid)
         if valid(i,"ish") and i.get("status") in (
             "OK","TEST_FAILED","DEPENDENCY_MISSING","SHA_NOT_APPROVED",
             "GIT_UNAVAILABLE","EXECUTION_ERROR","RUNNER_TIMEOUT"):
             done(i["status"],"ish",i.get("reason","ISH_COMPLETED"))
             continue
-        if now-created>CODE_ACTIONS_WAIT+CODE_ISH_WAIT:
+        if aid not in actions_sent:
+            if now-created>MAX_AGE:
+                done("TIMED_OUT","none","REQUEST_EXPIRED")
+            else:
+                emit(token,CODE_ACTIONS,{"request_id":aid,"sha":sha,"task":task})
+            continue
+        if now-created<CODE_ACTIONS_WAIT and not valid(a,"actions"):
+            continue
+        if iid not in ish_sent:
+            if now-created>MAX_AGE:
+                done("TIMED_OUT","none","REQUEST_EXPIRED")
+            else:
+                emit(token,CODE_ISH,{"request_id":iid,"sha":sha,"task":task})
+            continue
+        # Start the iSH timeout when the iSH request was actually posted,
+        # NOT from the original Actions request.
+        if now-ish_sent[iid]>CODE_ISH_WAIT:
             done("TIMED_OUT","ish","NO_MATCHING_RESULT")
 
 def main():
