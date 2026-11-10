@@ -383,7 +383,12 @@ def poll(token):
             request=json.loads(body[len(PREFIX):].strip())
             expected={"request_id","action","steps"} if request.get("action")=="TASK_PLAN_V1" else {"request_id","action"}
             if set(request)!=expected: raise ValueError("요청 형식 오류")
-            if request["action"] not in ACTIONS: raise ValueError("허용되지 않는 명령")
+            # Other authorized iSH worker generations may share this issue.
+            # Ignore unsupported actions rather than emitting misleading
+            # ValueError results for historical requests.
+            if request["action"] not in ACTIONS:
+                print("지원하지 않는 기존 작업 건너뜀:", ident, flush=True)
+                checkpoint_set(ident);last=ident;continue
             if not isinstance(request["request_id"],str) or len(request["request_id"])>80:
                 raise ValueError("request_id 오류")
             result=run_action(request["action"],request)
