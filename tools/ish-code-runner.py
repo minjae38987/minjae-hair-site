@@ -50,6 +50,45 @@ TRANSIENT = {"GIT_NETWORK", "RUNNER_TIMEOUT"}
 VALID_STATES = {"OK", "TEST_FAILED", "DEPENDENCY_MISSING", "GIT_UNAVAILABLE",
                 "SHA_NOT_APPROVED", "RUNNER_TIMEOUT", "EXECUTION_ERROR"}
 
+# A bounded retry budget makes a transient DNS or TLS failure recover during
+# one approved request. An authentication failure must not be retried blindly.
+FETCH_ATTEMPTS = 3
+FETCH_TIMEOUT = 25
+FETCH_BACKOFF_SECONDS = (2, 4)
+
+def fetch_failure_kind(output):
+    """Classify locally only; never publish raw git stderr or URL content."""
+    text = (output or "").lower()[:5000]
+    if any(x in text for x in (
+            "authentication failed", "permission denied (publickey)",
+            "repository not found", "could not read username",
+            "remote: permission to", "http 401", "http 403")):
+        return "AUTH_OR_PERMISSION"
+    if any(x in text for x in (
+            "could not resolve host", "temporary failure in name resolution",
+            "connection timed out", "connection reset", "network is unreachable",
+            "ssl connection timeout", "tls handshake timeout",
+            "failed to connect", "unable to access")):
+        return "TRANSIENT_NETWORK"
+    return "UNKNOWN_GIT_FAILURE"
+
+def fetch_main_with_retry():
+    """Retry the fixed trusted main branch; total maximum fetch time 75s."""
+    command = ["git", "-C", str(REPO), "fetch", "--no-tags",
+               "--depth=1000", "origin", "main"]
+    for attempt in range(FETCH_ATTEMPTS):
+        fetch = exec_fixed(command, timeout=FETCH_TIMEOUT, env=clean_env())
+        if fetch.get("missing"):
+            return "GIT_MISSING"
+        if fetch["code"] == 0:
+            return "OK"
+        if fetch_failure_kind(fetch.get("output", "")) == "AUTH_OR_PERMISSION":
+            return "GIT_AUTH"
+        if attempt < FETCH_ATTEMPTS - 1:
+            time.sleep(FETCH_BACKOFF_SECONDS[attempt])
+    return "GIT_NETWORK"
+
+
 def exec_fixed(argv, cwd=None, timeout=35, env=None):
     if not isinstance(argv, list) or not argv or any(not isinstance(x, str) for x in argv):
         raise ValueError("invalid_fixed_argv")
@@ -186,10 +225,9 @@ def verify_repo(sha):
     if locally_verified_commit(sha):
         return "OK_CACHED"
     # Fetch trusted branch, then require requested commit to be its ancestor.
-    fetch = exec_fixed(["git", "-C", str(REPO), "fetch", "--no-tags",
-                        "--depth=1000", "origin", "main"], timeout=50, env=clean_env())
-    if fetch.get("timeout") or fetch["code"] != 0:
-        return "OK_CACHED" if locally_verified_commit(sha) else "GIT_NETWORK"
+    fetch_status = fetch_main_with_retry()
+    if fetch_status != "OK":
+        return "OK_CACHED" if locally_verified_commit(sha) else fetch_status
     ref = exec_fixed(["git", "-C", str(REPO), "rev-parse", "FETCH_HEAD"])
     if ref["code"] != 0 or not SHA_RE.fullmatch(ref["output"].strip()):
         return "GIT_UNAVAILABLE"
@@ -235,15 +273,14 @@ def perform(req):
             return stored
         start = time.monotonic()
         repo_status = verify_repo(sha)
-        # Only one bounded retry for transient transport failure. A failing
-        # test or rejected SHA is deterministic and must never be retried
-        # blindly under the same request.
-        if repo_status == "GIT_NETWORK":
-            time.sleep(2)
-            repo_status = verify_repo(sha)
+        # The fixed-origin fetch already owns its bounded retry budget.
+        # Never retry a rejected SHA or authentication failure.
         if repo_status not in ("OK","OK_CACHED"):
             status = "SHA_NOT_APPROVED" if repo_status == "SHA_NOT_APPROVED" else "GIT_UNAVAILABLE"
-            outcome = result(rid, sha, task, status, repo_status, elapsed=time.monotonic()-start)
+            reason = repo_status if repo_status in (
+                "SHA_NOT_APPROVED", "GIT_NETWORK", "GIT_AUTH", "GIT_MISSING",
+                "GIT_UNAVAILABLE") else "GIT_UNAVAILABLE"
+            outcome = result(rid, sha, task, status, reason, elapsed=time.monotonic()-start)
         else:
             argv, timeout = TASKS[task]
             if shutil.which(argv[0]) is None:
