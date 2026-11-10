@@ -309,6 +309,24 @@ def send(token, request_id, status, data, prefix=RESULT, action=None):
         print("Issue #22 결과 전송 실패: HTTP",exc.code,flush=True)
         raise
 
+def code_result_already_posted(token, request_comment_id, request_id, sha, task):
+    """Read after an ambiguous send before retrying to avoid duplicate results."""
+    for entry in comments(token, request_comment_id):
+        if entry.get("user",{}).get("login","").lower()!=OWNER.lower():
+            continue
+        body=entry.get("body","")
+        if not isinstance(body,str) or not body.startswith(CODE_RESULT):
+            continue
+        try:
+            item=json.loads(body[len(CODE_RESULT):])
+        except (ValueError,TypeError):
+            continue
+        if (isinstance(item,dict) and item.get("request_id")==request_id and
+                item.get("sha")==sha and item.get("task")==task and
+                item.get("runner")=="ish"):
+            return True
+    return False
+
 def checkpoint_get():
     try: return int(STATE_FILE.read_text().strip())
     except (OSError, ValueError): return 0
@@ -406,9 +424,12 @@ def poll(token):
                 print("Code runner internal error:",type(exc).__name__,flush=True)
             # A failed GitHub post must NOT advance the checkpoint.
             # The SQLite result cache prevents a second code execution.
-            api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),
-                token,{"body":CODE_RESULT+json.dumps(
-                    job_result,ensure_ascii=False,separators=(",",":"))})
+            if not code_result_already_posted(token,ident,rid,sha,task):
+                api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),
+                    token,{"body":CODE_RESULT+json.dumps(
+                        job_result,ensure_ascii=False,separators=(",",":"))})
+            else:
+                print("Code result already posted; replay suppressed:",rid,flush=True)
             checkpoint_set(ident);last=ident
             print("Code job result delivered:",rid,job_result["status"],flush=True)
             continue
