@@ -66,25 +66,38 @@ def execute(api,token,req):
         return {"request_id":rid,"action":ALLOWED_ACTION,
                 "status":"ERROR","reason":reason,
                 "branch":branch,"content_sha256":digest}
-    # Probe existing branch first. A replay must not modify an existing
-    # branch whose head no longer matches its expected starting point.
+    # Check the pinned main commit before creating any ref.
+    # Do NOT GET a nonexistent ref first: some GitHub permissions respond
+    # with 403 instead of 404 for that lookup.
+    head=request("GET",REPO+"/git/ref/heads/main")
+    current=(head.get("object") or {}).get("sha") if isinstance(head,dict) else None
     existing=None
-    try:
-        existing=request("GET",REPO+"/git/ref/heads/"+branch)
-    except urllib.error.HTTPError as e:
-        if e.code!=404: raise
-    if existing is None:
-        head=request("GET",REPO+"/git/ref/heads/main")
-        if not isinstance(head,dict) or (head.get("object") or {}).get("sha")!=sha:
-            return fail("BASE_SHA_MISMATCH")
+    created=False
+    if current == sha:
         try:
-            request("POST",REPO+"/git/refs",{"ref":"refs/heads/"+branch,"sha":sha})
+            created_ref=request("POST",REPO+"/git/refs",
+                {"ref":"refs/heads/"+branch,"sha":sha})
+            created=True
+            existing=created_ref
         except urllib.error.HTTPError as e:
             if e.code!=422: raise
-            # Race with another request. Refetch; never assume ownership.
-        existing=request("GET",REPO+"/git/ref/heads/"+branch)
-    if not isinstance(existing,dict) or not SHA.fullmatch((existing.get("object") or {}).get("sha","")):
+            # The ref already exists (or a validation rule failed). A
+            # follow-up GET must prove its exact identity, never trust 422.
+            existing=request("GET",REPO+"/git/ref/heads/"+branch)
+    else:
+        # An older, already-completed request may be replayed after main
+        # changes. Read-only verification is allowed; a new write is not.
+        try:
+            existing=request("GET",REPO+"/git/ref/heads/"+branch)
+        except urllib.error.HTTPError as e:
+            if e.code==404:
+                return fail("BASE_SHA_MISMATCH")
+            raise
+    ref_sha=(existing.get("object") or {}).get("sha") if isinstance(existing,dict) else None
+    if not isinstance(ref_sha,str) or not SHA.fullmatch(ref_sha):
         return fail("BRANCH_UNVERIFIED")
+    if created and ref_sha!=sha:
+        return fail("CREATED_BRANCH_SHA_MISMATCH")
     path=REPO+"/contents/"+target+"?ref="+branch
     previous=None
     try:
@@ -101,9 +114,11 @@ def execute(api,token,req):
         return {"request_id":rid,"action":ALLOWED_ACTION,"status":"OK",
                 "reason":"ALREADY_COMMITTED","branch":branch,
                 "content_sha256":digest}
-    if existing["object"]["sha"]!=sha:
-        return fail("BRANCH_MOVED_BEFORE_WRITE")
-    # A pre-created but empty branch is also bound to the pinned main HEAD.
+    # Never modify an already existing branch, even when its HEAD
+    # matches the requested commit and the proof file is absent.
+    if not created:
+        return fail("EXISTING_BRANCH_WITHOUT_PROOF")
+    # Detect a main branch update between the first read and the PUT.
     head=request("GET",REPO+"/git/ref/heads/main")
     if not isinstance(head,dict) or (head.get("object") or {}).get("sha")!=sha:
         return fail("BASE_SHA_MISMATCH")
