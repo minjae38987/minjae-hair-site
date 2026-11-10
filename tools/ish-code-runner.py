@@ -113,8 +113,27 @@ def open_db():
     db.execute("""CREATE TABLE IF NOT EXISTS jobs(
         request_id TEXT PRIMARY KEY, sha TEXT NOT NULL, task TEXT NOT NULL,
         result_json TEXT NOT NULL, completed_at INTEGER NOT NULL)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS verified_commits(
+        sha TEXT PRIMARY KEY, verified_at INTEGER NOT NULL)""")
     db.commit()
     return db
+
+def mark_verified_commit(sha):
+    """Trust is created ONLY after a successful online main-ancestry check."""
+    with open_db() as db:
+        db.execute("INSERT OR REPLACE INTO verified_commits VALUES(?,?)",
+                   (sha,int(time.time())))
+
+def locally_verified_commit(sha):
+    """Allow offline repeat only for the identical previously approved SHA."""
+    with open_db() as db:
+        row=db.execute("SELECT verified_at FROM verified_commits WHERE sha=?",(sha,)).fetchone()
+    if not row:
+        return False
+    # Exact Git object must still exist in the trusted origin worktree.
+    obj=exec_fixed(["git","-C",str(REPO),"cat-file","-e",sha+"^{commit}"],
+                   timeout=12,env=clean_env())
+    return obj["code"]==0
 
 def validate(req):
     if not isinstance(req, dict) or set(req) != {"request_id", "sha", "task"}:
@@ -143,13 +162,16 @@ def verify_repo(sha):
     fetch = exec_fixed(["git", "-C", str(REPO), "fetch", "--no-tags",
                         "--depth=1000", "origin", "main"], timeout=50, env=clean_env())
     if fetch.get("timeout") or fetch["code"] != 0:
-        return "GIT_NETWORK"
+        return "OK_CACHED" if locally_verified_commit(sha) else "GIT_NETWORK"
     ref = exec_fixed(["git", "-C", str(REPO), "rev-parse", "FETCH_HEAD"])
     if ref["code"] != 0 or not SHA_RE.fullmatch(ref["output"].strip()):
         return "GIT_UNAVAILABLE"
     parent = exec_fixed(["git", "-C", str(REPO), "merge-base", "--is-ancestor",
                          sha, ref["output"].strip()])
-    return "OK" if parent["code"] == 0 else "SHA_NOT_APPROVED"
+    if parent["code"] == 0:
+        mark_verified_commit(sha)
+        return "OK"
+    return "SHA_NOT_APPROVED"
 
 def node_test_supported():
     check=exec_fixed(["node","--version"],timeout=10,env=clean_env())
@@ -192,7 +214,7 @@ def perform(req):
         if repo_status == "GIT_NETWORK":
             time.sleep(2)
             repo_status = verify_repo(sha)
-        if repo_status != "OK":
+        if repo_status not in ("OK","OK_CACHED"):
             status = "SHA_NOT_APPROVED" if repo_status == "SHA_NOT_APPROVED" else "GIT_UNAVAILABLE"
             outcome = result(rid, sha, task, status, repo_status, elapsed=time.monotonic()-start)
         else:
