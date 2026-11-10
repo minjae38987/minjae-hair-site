@@ -35,6 +35,16 @@ class CodeRunnerTests(unittest.TestCase):
                 self.assertTrue(second["cached"])
                 self.assertEqual(check.call_count,1)
 
+    def test_transient_network_retry_is_bounded(self):
+        with TemporaryDirectory() as folder:
+            with patch.object(code,"STATE",Path(folder)/"jobs.sqlite3"),patch.object(
+                    code,"verify_repo",side_effect=["GIT_NETWORK","SHA_NOT_APPROVED"]) as check,patch.object(
+                    code.time,"sleep") as sleeper:
+                out=code.perform(job("case_retry_001"))
+                self.assertEqual(out["status"],"SHA_NOT_APPROVED")
+                self.assertEqual(check.call_count,2)
+                self.assertEqual(sleeper.call_count,1)
+
     def test_id_conflict_does_not_reuse_wrong_result(self):
         with TemporaryDirectory() as folder:
             with patch.object(code,"STATE",Path(folder)/"jobs.sqlite3"),patch.object(
