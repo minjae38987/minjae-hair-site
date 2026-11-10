@@ -22,13 +22,26 @@ STATE = Path.home() / ".config" / "minjae-ish-bridge" / "code_jobs.sqlite3"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ID_RE = re.compile(r"^[A-Za-z0-9._-]{4,64}$")
 TASKS = {
-    "PYTHON_SYNTAX": (["python3", "-m", "compileall", "-q", "scripts", "tests"], 75),
+    "PYTHON_SYNTAX": (["python3", "-m", "compileall", "-q", "scripts", "tests", "src", "photo_quality", "instagram_analyzer"], 110),
     "NODE_DUAL_TEST": (["node", "--test",
                         "tests/dual_runner_protocol.test.mjs",
                         "tests/dual_runner_router.test.mjs",
                         "tests/dual_runner_coordinator.test.mjs"], 110),
     "NODE_SYNTAX": (["node", "--check", "scripts/dual_runner_coordinator.mjs"], 50),
 }
+# Explicit, immutable file targets. No paths supplied by issue requests.
+NODE_SYNTAX_FILES = (
+    "scripts/code_verify_actions.mjs",
+    "scripts/dual_runner_actions.mjs",
+    "scripts/dual_runner_coordinator.mjs",
+    "scripts/dual_runner_dispatch.mjs",
+    "scripts/dual_runner_protocol.mjs",
+    "scripts/dual_runner_router.mjs",
+    "scripts/lumi_staff_auth_probe.mjs",
+    "tests/dual_runner_protocol.test.mjs",
+    "tests/dual_runner_router.test.mjs",
+    "tests/dual_runner_coordinator.test.mjs",
+)
 # These tests must never write to external services. An explicit profile is
 # required to add other suites after review.
 MAX_OUTPUT = 180000
@@ -149,6 +162,15 @@ def node_test_supported():
     # modern regression runner is only supported on Node >=18.
     return major>=18
 
+def check_node_files(worktree):
+    """Use legacy-compatible node --check sequentially; no JavaScript runs."""
+    for filename in NODE_SYNTAX_FILES:
+        item = exec_fixed(["node", "--check", filename], cwd=worktree,
+                          timeout=18, env=clean_env())
+        if item["code"] != 0:
+            return item
+    return {"code": 0, "output": "", "truncated": False}
+
 def perform(req):
     rid, sha, task = validate(req)
     db = open_db()
@@ -192,7 +214,8 @@ def perform(req):
                                          elapsed=time.monotonic()-start)
                     else:
                         try:
-                            run = exec_fixed(argv, cwd=path, timeout=timeout, env=clean_env())
+                            run = (check_node_files(path) if task == "NODE_SYNTAX" else
+                                   exec_fixed(argv, cwd=path, timeout=timeout, env=clean_env()))
                             status = ("RUNNER_TIMEOUT" if run.get("timeout") else
                                       "DEPENDENCY_MISSING" if run.get("missing") else
                                       "OK" if run["code"] == 0 else "TEST_FAILED")
