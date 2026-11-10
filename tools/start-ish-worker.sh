@@ -1,32 +1,33 @@
 #!/bin/sh
-# Update and supervise both restricted iSH worker and failover coordinator.
-# No secrets are downloaded; tokens remain stored locally in iSH.
+# Fail-closed installer and supervisor for iSH code verification.
+# Verify the entire candidate release before replacing running files.
 set -eu
 BASE='https://raw.githubusercontent.com/minjae38987/minjae-hair-site/ish-worker-stable/tools'
-BRIDGE='/root/ish_bridge_v2.py'
-COORD='/root/ish-failover-coordinator.py'
-CODE='/root/ish-code-runner.py'
-TB='/root/.ish_bridge_v2_download.py'
-TC='/root/.ish_failover_download.py'
-TD='/root/.ish_code_runner_download.py'
+STAGE=$(mktemp -d /root/ish-release.XXXXXX)
+COORD_PID=''
 umask 077
 cleanup() {
-  if [ -n "${COORD_PID:-}" ]; then
+  if [ -n "$COORD_PID" ]; then
     kill "$COORD_PID" 2>/dev/null || true
     wait "$COORD_PID" 2>/dev/null || true
   fi
-  rm -f "$TB" "$TC" "$TD"
+  rm -rf "$STAGE"
 }
-trap cleanup EXIT HUP INT TERM
-curl -fsSL --max-time 35 "$BASE/ish-bridge-v2.py" -o "$TB"
-curl -fsSL --max-time 35 "$BASE/ish-failover-coordinator.py" -o "$TC"
-curl -fsSL --max-time 35 "$BASE/ish-code-runner.py" -o "$TD"
-python3 -m py_compile "$TB" "$TC" "$TD"
-mv "$TB" "$BRIDGE"
-mv "$TC" "$COORD"
-mv "$TD" "$CODE"
-chmod 600 "$BRIDGE" "$COORD" "$CODE"
-echo 'iSH worker, code runner and failover coordinator verified by Python compilation'
-python3 "$COORD" &
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+for name in ish-bridge-v2.py ish-failover-coordinator.py ish-code-runner.py test-ish-code-runner.py; do
+  curl -fsSL --max-time 35 "$BASE/$name" -o "$STAGE/$name"
+done
+python3 -m py_compile "$STAGE/ish-bridge-v2.py" "$STAGE/ish-failover-coordinator.py" "$STAGE/ish-code-runner.py" "$STAGE/test-ish-code-runner.py"
+python3 "$STAGE/test-ish-code-runner.py"
+# Only after syntax and regression checks pass, install the complete release.
+mv "$STAGE/ish-bridge-v2.py" /root/ish_bridge_v2.py
+mv "$STAGE/ish-failover-coordinator.py" /root/ish-failover-coordinator.py
+mv "$STAGE/ish-code-runner.py" /root/ish-code-runner.py
+chmod 600 /root/ish_bridge_v2.py /root/ish-failover-coordinator.py /root/ish-code-runner.py
+echo 'iSH V4 release verified: Python syntax and code-runner regression suite passed'
+python3 /root/ish-failover-coordinator.py &
 COORD_PID=$!
-python3 "$BRIDGE"
+python3 /root/ish_bridge_v2.py
