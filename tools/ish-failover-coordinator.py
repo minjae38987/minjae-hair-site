@@ -26,8 +26,8 @@ AUTO = "MINJAE_AUTO_V1 "
 FINAL = "MINJAE_AUTO_RESULT_V1 "
 ACTIONS = "MINJAE_JOB_V1 "
 ACTIONS_RESULT = "MINJAE_RESULT_V1 "
-ISH = "ISH_V2_REQUEST "
-ISH_RESULT = "ISH_V2_RESULT "
+ISH = "ISH_V3_REQUEST "
+ISH_RESULT = "ISH_V3_RESULT "
 TASKS = {"HEALTH_CHECK": "PING", "LUMI_PUBLIC": "LUMI_PUBLIC"}
 ID = re.compile(r"^[A-Za-z0-9._-]{4,64}$")
 ACTIONS_WAIT = 180
@@ -87,13 +87,13 @@ def index_events(events):
         if raw and who == OWNER and raw.get("runner") == "actions":
             actions_jobs.add(raw.get("request_id"))
         raw = event_data(entry, ISH)
-        if raw and who == OWNER:
+        if raw and who == OWNER and raw.get("action") in TASKS.values():
             ish_jobs.add(raw.get("request_id"))
         raw = event_data(entry, ACTIONS_RESULT)
         if raw and who in ("github-actions[bot]", OWNER) and raw.get("runner") == "actions":
             actions_results[raw.get("request_id")] = raw
         raw = event_data(entry, ISH_RESULT)
-        if raw and who == OWNER:
+        if raw and who == OWNER and raw.get("action") in TASKS.values():
             ish_results[raw.get("request_id")] = raw
         raw = event_data(entry, FINAL)
         if raw and who == OWNER and isinstance(raw.get("request_id"), str):
@@ -132,7 +132,7 @@ def tick(token, now=None):
             print("Failover to iSH:", rid, flush=True)
             continue
         i = ir.get(iid)
-        if i and i.get("status") == "OK":
+        if i and i.get("status") == "OK" and i.get("action") == TASKS[task]:
             data = i.get("data") or {}
             if (task == "HEALTH_CHECK" and data.get("bridge") == "online") or (
                     task == "LUMI_PUBLIC" and data.get("http_status") == 200):
