@@ -126,7 +126,7 @@ def verify_repo(sha):
         return "GIT_UNAVAILABLE"
     # Fetch trusted branch, then require requested commit to be its ancestor.
     fetch = exec_fixed(["git", "-C", str(REPO), "fetch", "--no-tags",
-                        "--depth=1000", "origin", "main"], timeout=100, env=clean_env())
+                        "--depth=1000", "origin", "main"], timeout=50, env=clean_env())
     if fetch.get("timeout") or fetch["code"] != 0:
         return "GIT_NETWORK"
     ref = exec_fixed(["git", "-C", str(REPO), "rev-parse", "FETCH_HEAD"])
@@ -150,6 +150,12 @@ def perform(req):
             return stored
         start = time.monotonic()
         repo_status = verify_repo(sha)
+        # Only one bounded retry for transient transport failure. A failing
+        # test or rejected SHA is deterministic and must never be retried
+        # blindly under the same request.
+        if repo_status == "GIT_NETWORK":
+            time.sleep(2)
+            repo_status = verify_repo(sha)
         if repo_status != "OK":
             status = "SHA_NOT_APPROVED" if repo_status == "SHA_NOT_APPROVED" else "GIT_UNAVAILABLE"
             outcome = result(rid, sha, task, status, repo_status, elapsed=time.monotonic()-start)
