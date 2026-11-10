@@ -31,6 +31,8 @@ RESULT = "ISH_V2_RESULT "
 V3_PREFIX = "ISH_V3_REQUEST "
 V3_RESULT = "ISH_V3_RESULT "
 CODE_PREFIX = "ISH_CODE_REQUEST_V1 "
+WRITE_PREFIX = "ISH_WRITE_REQUEST_V1 "
+WRITE_RESULT = "ISH_WRITE_RESULT_V1 "
 CODE_RESULT = "ISH_CODE_RESULT_V1 "
 DUAL_PREFIX = "HAIR_JOB_V1 "
 DUAL_RESULT = "HAIR_JOB_RESULT_V1 "
@@ -412,6 +414,42 @@ def poll(token):
                 send_shared(token,fail)
                 print("공통 작업 오류:",ident,type(exc).__name__,flush=True)
             checkpoint_set(ident);last=ident;continue
+        if body.startswith(WRITE_PREFIX):
+            # Only the repository owner's validated fixed proof request can
+            # create a dedicated, non-main branch. No shell or caller text.
+            try:
+                if len(body)>600: raise ValueError("write_request_too_long")
+                request=json.loads(body[len(WRITE_PREFIX):].strip())
+                writer=SourceFileLoader("ish_safe_write",
+                    str(Path(__file__).with_name("ish-safe-write.py"))).load_module()
+                rid,base=writer.validate(request)
+            except (ValueError,TypeError,KeyError,ImportError,OSError):
+                print("Invalid write request ignored:",ident,flush=True)
+                checkpoint_set(ident);last=ident;continue
+            try:
+                report=writer.execute(api,token,request)
+            except urllib.error.HTTPError as exc:
+                report={"request_id":rid,"action":"PROOF_COMMIT","status":"ERROR",
+                        "reason":"GITHUB_HTTP_"+str(exc.code)}
+            except Exception as exc:
+                report={"request_id":rid,"action":"PROOF_COMMIT","status":"ERROR",
+                        "reason":"WRITE_RUNTIME_"+type(exc).__name__[:40]}
+            # Re-read comments after an ambiguous delivery before replaying.
+            existing=False
+            for comment in comments(token,ident):
+                if comment.get("user",{}).get("login","").lower()!=OWNER.lower():continue
+                raw=comment.get("body","")
+                if not isinstance(raw,str) or not raw.startswith(WRITE_RESULT):continue
+                try: past=json.loads(raw[len(WRITE_RESULT):])
+                except (ValueError,TypeError):continue
+                if isinstance(past,dict) and past.get("request_id")==rid:
+                    existing=True;break
+            if not existing:
+                api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),
+                    token,{"body":WRITE_RESULT+json.dumps(report,separators=(",",":"))})
+            checkpoint_set(ident);last=ident
+            print("Write proof:",rid,report["status"],report["reason"],flush=True)
+            continue
         if body.startswith(CODE_PREFIX):
             # Invalid jobs are ignored; internal failures return a sanitized
             # error instead of crashing the persistent bridge process.

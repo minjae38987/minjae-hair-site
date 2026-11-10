@@ -23,6 +23,7 @@ MODULES = {
     "code_runner": ROOT / "ish-code-runner.py",
     "failure_diagnostic": ROOT / "actions-failure-diagnostic.py",
     "run_probe": ROOT / "actions-run-probe.py",
+    "safe_write": ROOT / "ish-safe-write.py",
 }
 
 def digest(path):
