@@ -3,6 +3,7 @@
 Python 3.9+. No Git pulls, no arbitrary code execution, no credential exfiltration.
 """
 import getpass
+from importlib.machinery import SourceFileLoader
 import fcntl
 import html.parser
 import json
@@ -28,6 +29,8 @@ PREFIX = "ISH_V2_REQUEST "
 RESULT = "ISH_V2_RESULT "
 V3_PREFIX = "ISH_V3_REQUEST "
 V3_RESULT = "ISH_V3_RESULT "
+CODE_PREFIX = "ISH_CODE_REQUEST_V1 "
+CODE_RESULT = "ISH_CODE_RESULT_V1 "
 DUAL_PREFIX = "HAIR_JOB_V1 "
 DUAL_RESULT = "HAIR_JOB_RESULT_V1 "
 DUAL_ALLOWED = frozenset(("PING","LUMI_PUBLIC","GIT_DIAG","PYTHON_ENV","LUMI_AUTH_MAP","LUMI_LOGIN_FLOW"))
@@ -378,6 +381,29 @@ def poll(token):
                       "status":"ERROR","data":{"type":type(exc).__name__}}
                 send_shared(token,fail)
                 print("공통 작업 오류:",ident,type(exc).__name__,flush=True)
+            checkpoint_set(ident);last=ident;continue
+        if body.startswith(CODE_PREFIX):
+            # New code runner has a separate strict protocol. Never execute
+            # arbitrary shell strings, commit refs or user-supplied file paths.
+            request = None
+            try:
+                if len(body) > 1200: raise ValueError("oversized_request")
+                request = json.loads(body[len(CODE_PREFIX):].strip())
+                worker_path = Path(__file__).with_name("ish-code-runner.py")
+                code_runner = SourceFileLoader("ish_code_runner",str(worker_path)).load_module()
+                job_result = code_runner.perform(request)
+                api("POST","/repos/{}/{}/issues/{}/comments".format(OWNER,REPO,ISSUE),
+                    token, {"body":CODE_RESULT + json.dumps(
+                        job_result,ensure_ascii=False,separators=(",",":"))})
+                print("Code job:",job_result["request_id"],job_result["status"],flush=True)
+            except (ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:
+                print("Invalid code request ignored:",ident,type(exc).__name__,flush=True)
+            except Exception as exc:
+                # Error types only; no potentially sensitive exception strings.
+                print("Code runner failed:",ident,type(exc).__name__,flush=True)
+                # Do not checkpoint execution failures: a restarted process can
+                # retry using the runner's durable request_id result cache.
+                raise
             checkpoint_set(ident);last=ident;continue
         if body.startswith(DUAL_PREFIX):
             dual_job(token,body)
