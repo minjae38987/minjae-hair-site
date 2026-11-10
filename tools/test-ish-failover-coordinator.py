@@ -129,5 +129,34 @@ class FastFailoverTests(unittest.TestCase):
              "status":"OK","runner":"actions","reason":"ACTIONS_CONFIRMED"},1020))
         self.assertEqual(self.capture(events,4000),[])
 
+
+class IntegrationDiagnosticTests(unittest.TestCase):
+    def test_failed_diagnostic_cannot_block_failover(self):
+        events=[
+            event("MINJAE_AUTO_V1",{"request_id":"diag-probe-001","task":"HEALTH_CHECK"},1000),
+            event("MINJAE_JOB_V1",{"request_id":"diag-probe-001-actions",
+                  "runner":"actions","task":"HEALTH_CHECK"},1010)]
+        emitted=[]
+        with patch.object(mod,"read_events",return_value=events):
+            with patch.object(mod,"emit",side_effect=lambda token,prefix,obj:emitted.append((prefix,obj))):
+                with patch.object(mod,"observe_actions_failure",side_effect=RuntimeError("diagnostic offline")):
+                    # A separate observer failure happens after an iSH request was emitted.
+                    with self.assertRaises(RuntimeError):
+                        mod.tick("token",now=1050)
+        self.assertEqual(emitted[0][0],mod.ISH)
+
+    def test_observer_swallows_network_errors(self):
+        mod._probe_attempted.clear()
+        with patch.object(mod,"SourceFileLoader",side_effect=OSError("offline")):
+            mod.observe_actions_failure("token","diag-002-actions",1010,"general")
+        self.assertIn("diag-002-actions",mod._probe_attempted)
+
+    def test_observer_only_probes_once_per_process(self):
+        mod._probe_attempted.clear()
+        with patch.object(mod,"SourceFileLoader",side_effect=OSError("offline")) as loader:
+            mod.observe_actions_failure("token","diag-003-actions",1010,"general")
+            mod.observe_actions_failure("token","diag-003-actions",1010,"general")
+        self.assertEqual(loader.call_count,1)
+
 if __name__=="__main__":
     unittest.main(verbosity=2)
