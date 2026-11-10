@@ -33,6 +33,18 @@ ID = re.compile(r"^[A-Za-z0-9._-]{4,64}$")
 ACTIONS_WAIT = 180
 ISH_WAIT = 240
 MAX_AGE = 1800
+CODE_AUTO = "MINJAE_CODE_AUTO_V1 "
+CODE_ACTIONS = "MINJAE_CODE_ACTIONS_REQUEST_V1 "
+CODE_ACTIONS_RESULT = "MINJAE_CODE_ACTIONS_RESULT_V1 "
+CODE_ISH = "ISH_CODE_REQUEST_V1 "
+CODE_ISH_RESULT = "ISH_CODE_RESULT_V1 "
+CODE_FINAL = "MINJAE_CODE_AUTO_RESULT_V1 "
+CODE_TASKS = frozenset(("PYTHON_SYNTAX", "NODE_DUAL_TEST"))
+SHA = re.compile(r"^[a-f0-9]{40}$")
+CODE_ID = re.compile(r"^[A-Za-z0-9._-]{4,50}$")
+CODE_ACTIONS_WAIT = 180
+CODE_ISH_WAIT = 240
+
 
 def utc_seconds(value):
     try:
@@ -106,7 +118,8 @@ def result(token, rid, task, status, runner, reason):
 
 def tick(token, now=None):
     now = time.time() if now is None else now
-    requests, aj, ij, ar, ir, finals = index_events(read_events(token))
+    events = read_events(token)
+    requests, aj, ij, ar, ir, finals = index_events(events)
     for rid, (task, created) in requests.items():
         if rid in finals:
             continue
@@ -140,7 +153,65 @@ def tick(token, now=None):
                 continue
         if now - created >= ACTIONS_WAIT + ISH_WAIT:
             result(token, rid, task, "TIMED_OUT", "ish", "NO_CONFIRMED_SUCCESS")
+    code_tick(token, events, now)
     return len(requests)
+
+def code_tick(token, events, now):
+    """Event-sourced, read-only code verification using one pinned SHA."""
+    jobs, actions_sent, ish_sent, ar, ir, finals = {}, set(), set(), {}, {}, set()
+    for e in events:
+        who = author(e)
+        raw = event_data(e, CODE_AUTO)
+        if raw and who == OWNER and set(raw) == {"request_id","sha","task"}:
+            rid, sha, task = raw.get("request_id"), raw.get("sha"), raw.get("task")
+            if isinstance(rid,str) and CODE_ID.fullmatch(rid) and (
+                    isinstance(sha,str) and SHA.fullmatch(sha)) and task in CODE_TASKS:
+                jobs.setdefault(rid,(sha,task,utc_seconds(e.get("created_at"))))
+        raw = event_data(e, CODE_ACTIONS)
+        if raw and who == OWNER: actions_sent.add(raw.get("request_id"))
+        raw = event_data(e, CODE_ISH)
+        if raw and who == OWNER: ish_sent.add(raw.get("request_id"))
+        raw = event_data(e, CODE_ACTIONS_RESULT)
+        if raw and who in (OWNER,"github-actions[bot]"):
+            ar[raw.get("request_id")] = raw
+        raw = event_data(e, CODE_ISH_RESULT)
+        if raw and who == OWNER:
+            ir[raw.get("request_id")] = raw
+        raw = event_data(e, CODE_FINAL)
+        if raw and who == OWNER and raw.get("request_id"):
+            finals.add(raw["request_id"])
+    for rid, (sha, task, created) in jobs.items():
+        if rid in finals: continue
+        aid, iid = rid+"-actions", rid+"-ish"
+        def valid(x, runner):
+            return (isinstance(x,dict) and x.get("request_id") == (aid if runner=="actions" else iid)
+                    and x.get("sha")==sha and x.get("task")==task
+                    and x.get("runner")==runner)
+        def done(status, runner, reason):
+            emit(token,CODE_FINAL,{"request_id":rid,"sha":sha,"task":task,
+                                  "status":status,"runner":runner,"reason":reason})
+        if now-created>MAX_AGE:
+            done("TIMED_OUT","none","REQUEST_EXPIRED")
+            continue
+        if aid not in actions_sent:
+            emit(token,CODE_ACTIONS,{"request_id":aid,"sha":sha,"task":task})
+            continue
+        a=ar.get(aid)
+        if valid(a,"actions") and a.get("status")=="OK":
+            done("OK","actions","ACTIONS_CONFIRMED")
+            continue
+        if now-created<CODE_ACTIONS_WAIT and not valid(a,"actions"):
+            continue
+        if iid not in ish_sent:
+            emit(token,CODE_ISH,{"request_id":iid,"sha":sha,"task":task})
+            continue
+        i=ir.get(iid)
+        if valid(i,"ish") and i.get("status") in (
+            "OK","TEST_FAILED","DEPENDENCY_MISSING","SHA_NOT_APPROVED","GIT_UNAVAILABLE"):
+            done(i["status"],"ish",i.get("reason","ISH_COMPLETED"))
+            continue
+        if now-created>CODE_ACTIONS_WAIT+CODE_ISH_WAIT:
+            done("TIMED_OUT","ish","NO_MATCHING_RESULT")
 
 def main():
     # One active coordinator per iSH installation. A second launcher must not
