@@ -6,6 +6,7 @@ No passwords, arbitrary code, URLs, or customer data enter the protocol.
 iSH must remain running; this is not an iPadOS background service.
 """
 import datetime
+import hashlib
 import fcntl
 import json
 import os
@@ -44,6 +45,22 @@ SHA = re.compile(r"^[a-f0-9]{40}$")
 CODE_ID = re.compile(r"^[A-Za-z0-9._-]{4,50}$")
 CODE_ACTIONS_WAIT = 90
 CODE_ISH_WAIT = 420
+
+HEARTBEAT_FILE = Path.home() / ".config" / "minjae-ish-bridge" / "coordinator-heartbeat.json"
+# Capture this module's image once at process start; replacing the file on
+# disk cannot make an older running process falsely claim the new version.
+COORDINATOR_LOADED_DIGEST = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+def update_heartbeat():
+    """Report coordinator liveness with an atomic, private, bounded record."""
+    payload = {"pid": os.getpid(), "timestamp": time.time(),
+               "coordinator_digest": COORDINATOR_LOADED_DIGEST}
+    HEARTBEAT_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tmp = HEARTBEAT_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(HEARTBEAT_FILE)
+
 
 # Diagnostics must never delay the functional failover decision.
 PROBE_PATH = Path(__file__).with_name("actions-run-probe.py")
@@ -277,6 +294,10 @@ def main():
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError,
                 ValueError, RuntimeError) as exc:
             print("Coordinator retry:", type(exc).__name__, flush=True)
+        try:
+            update_heartbeat()
+        except OSError as exc:
+            print("Heartbeat unavailable:", type(exc).__name__, flush=True)
         if "--once" in sys.argv:
             break
         time.sleep(20)
