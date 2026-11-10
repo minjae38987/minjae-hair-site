@@ -95,8 +95,33 @@ class WriteTests(unittest.TestCase):
         def denied(method,path,token,payload=None):
             if method=="PUT":raise urllib.error.HTTPError(path,403,"forbidden",None,None)
             return original(method,path,token,payload)
-        result=m.execute(denied,"secret",req())
-        self.assertEqual(result["reason"],"WRITE_FAILED_HTTP_403")
+        with self.assertRaises(m.WriteAccessDenied) as err:
+            m.execute(denied,"secret",req())
+        self.assertEqual(err.exception.phase,"WRITE_PROOF_CONTENT")
+    def test_main_read_permission_denied_has_safe_phase(self):
+        api=FakeAPI()
+        orig=api.__call__
+        def denied(method,path,token,payload=None):
+            if path.endswith("/git/ref/heads/main"):
+                raise urllib.error.HTTPError(path,403,"forbidden",None,None)
+            return orig(method,path,token,payload)
+        with self.assertRaises(m.WriteAccessDenied) as err:
+            m.execute(denied,"secret",req())
+        self.assertEqual(err.exception.phase,"READ_MAIN_REF")
+        self.assertEqual(api.writes,0)
+
+    def test_branch_creation_denied_has_safe_phase(self):
+        api=FakeAPI()
+        orig=api.__call__
+        def denied(method,path,token,payload=None):
+            if method=="POST" and path.endswith("/git/refs"):
+                raise urllib.error.HTTPError(path,403,"forbidden",None,None)
+            return orig(method,path,token,payload)
+        with self.assertRaises(m.WriteAccessDenied) as err:
+            m.execute(denied,"secret",req())
+        self.assertEqual(err.exception.phase,"CREATE_PROOF_REF")
+        self.assertEqual(api.writes,0)
+
     def test_payload_deterministic(self):
         self.assertEqual(m.payload(RID,SHA),m.payload(RID,SHA))
 
