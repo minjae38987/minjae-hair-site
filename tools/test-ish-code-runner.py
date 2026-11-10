@@ -63,7 +63,7 @@ class CodeRunnerTests(unittest.TestCase):
             self.assertEqual(env["CI"],"1")
 
     def test_failure_classification_and_counts(self):
-        meta=code.error_metadata({"code":1,"output":"not ok 2 - assertion\\n# pass 13\\n# fail 1\\n"})
+        meta=code.error_metadata({"code":1,"output":chr(10).join(["not ok 2 - assertion","# pass 13","# fail 1",""])})
         self.assertEqual(meta["error_category"],"ASSERTION_FAILED")
         self.assertEqual(meta["tests_passed"],13)
         self.assertEqual(meta["tests_failed"],1)
