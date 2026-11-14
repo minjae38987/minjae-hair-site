@@ -1,0 +1,133 @@
+{
+  "report_date": "2026-11-15",
+  "date_range": "2026-11-01/2026-11-14",
+  "source": "connected GA4/GSC via Windsor.ai; existing GitHub competitor evidence",
+  "google_search_console": {
+    "daily_total": {
+      "clicks": 1,
+      "impressions": 10,
+      "ctr": 0.1
+    },
+    "page_dimension": [
+      {
+        "path": "/",
+        "impressions": 3,
+        "clicks": 1
+      },
+      {
+        "path": "/styles/mens-leaf-cut-before-after/",
+        "impressions": 3,
+        "clicks": 0
+      },
+      {
+        "path": "/styles/mens-leaf-volume-perm/",
+        "impressions": 5,
+        "clicks": 0
+      }
+    ],
+    "page_sum_impressions": 11,
+    "keyword_query_rows": 0,
+    "last_returned_date": "2026-11-11",
+    "discrepancy": "daily site total 10 vs page dimension 11; dimension differences unresolved"
+  },
+  "ga4": {
+    "property": "563083363",
+    "sessions": 7,
+    "pageviews": 20,
+    "naver_booking_click_event_count": 17,
+    "naver_booking_click_key_events": 14,
+    "sessions_by_source": {
+      "(direct) / (none)": 5,
+      "chatgpt.com / ai-assistant": 2
+    },
+    "paid_new_clients": null,
+    "confirmed_bookings": null,
+    "qa_traffic_possible": true
+  },
+  "competitor_analysis": {
+    "count": 5,
+    "individuals": [
+      {
+        "designer_id": "mande_gon",
+        "name": "곤",
+        "observed_at": "2026-11-09",
+        "source_grade": "D",
+        "overlap_terms": [
+          "필러스",
+          "드롭",
+          "가일",
+          "두상"
+        ],
+        "overlap_count": 4,
+        "requires_recheck": true
+      },
+      {
+        "designer_id": "mande_minjeong",
+        "name": "민정",
+        "observed_at": "2026-11-09",
+        "source_grade": "D",
+        "overlap_terms": [
+          "필러스",
+          "가일",
+          "시스루",
+          "모질"
+        ],
+        "overlap_count": 4,
+        "requires_recheck": true
+      },
+      {
+        "designer_id": "seo_in",
+        "name": "서인",
+        "observed_at": "2026-11-05",
+        "source_grade": "B",
+        "overlap_terms": [
+          "모질",
+          "두상",
+          "상담",
+          "손질"
+        ],
+        "overlap_count": 4,
+        "requires_recheck": false
+      },
+      {
+        "designer_id": "lee_seunghoon",
+        "name": "이승훈",
+        "observed_at": "2026-11-05",
+        "source_grade": "B",
+        "overlap_terms": [
+          "다운펌",
+          "필러스",
+          "리프",
+          "상담"
+        ],
+        "overlap_count": 4,
+        "requires_recheck": false
+      },
+      {
+        "designer_id": "kim_yumin",
+        "name": "김유민",
+        "observed_at": "2026-11-05",
+        "source_grade": "B",
+        "overlap_terms": [
+          "다운펌",
+          "드롭"
+        ],
+        "overlap_count": 2,
+        "requires_recheck": false
+      }
+    ],
+    "not_ranking": true
+  },
+  "status": {
+    "github_main_module_present": true,
+    "local_logic_execution_tests_passed": 6,
+    "github_actions_ci_verified": false,
+    "original_file_byte_identity_verified": false
+  },
+  "notes": [
+    "GSC query rows absent does not imply zero search demand",
+    "GA4 key events and raw event count have different definitions",
+    "Historical competitor observations, no current employment verification",
+    "No invented reservation conversion rate or designer ranking"
+  ]
+}
